@@ -5,6 +5,7 @@ import { readApiJson } from "../services/api";
 const API_BASE =
   import.meta.env.VITE_API_URL ||
   "";
+const CAREERS_WHATSAPP_NUMBER = "919359338557";
 
 /* =========================================================
    FALLBACK
@@ -209,26 +210,23 @@ export default function Careers() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const subject = `Job Application: ${formData.name} for ${formData.designation}`;
-
-    let body = `Name: ${formData.name}\n`;
-    body += `Phone No: ${formData.phone}\n`;
-    body += `Place: ${formData.place}\n`;
-    body += `Aadhar Card No: ${formData.aadhar}\n`;
-    body += `Designation: ${formData.designation}\n`;
-    body += `Portfolio Link: ${formData.portfolioLink}\n`;
-    body += `Resume: ${
+    let message = `Job Application\n\n`;
+    message += `Name: ${formData.name}\n`;
+    message += `Phone No: ${formData.phone}\n`;
+    message += `Place: ${formData.place}\n`;
+    message += `Aadhar Card No: ${formData.aadhar}\n`;
+    message += `Designation: ${formData.designation}\n`;
+    message += `Portfolio Link: ${formData.portfolioLink}\n`;
+    message += `Resume: ${
       formData.resume
         ? formData.resume.name
         : "No file attached"
     }`;
 
-    const mailtoLink =
-      `mailto:sancompany0@gmail.com` +
-      `?subject=${encodeURIComponent(subject)}` +
-      `&body=${encodeURIComponent(body)}`;
+    const whatsappUrl =
+      `https://wa.me/${CAREERS_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
-    window.location.href = mailtoLink;
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
 
     setFormData({
       name: "",
