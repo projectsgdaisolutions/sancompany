@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { readApiJson } from '../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // DEFAULT CONTACT DATA — exact values from Contact.jsx (Source of Truth)
 const DEFAULT_CONTACT = {
@@ -234,7 +235,7 @@ const ContactManagement = () => {
       setErrMsg('');
       setSaveMsg('');
       const res = await fetch(`${API_BASE_URL}/api/contact.php`);
-      const data = await res.json();
+      const data = await readApiJson(res, 'Contact');
       if (!res.ok || !data.success) throw new Error(data.message || 'Fetch failed.');
       const contactData = data.contact || data.data || data.content?.contact;
       const merged = mergeContact(contactData);
@@ -330,7 +331,7 @@ const ContactManagement = () => {
         },
         body: JSON.stringify({ content: { contact } }),
       });
-      const data = await res.json();
+      const data = await readApiJson(res, 'Contact');
       if (!res.ok || !data.success) throw new Error(data.message || 'Save failed.');
       const saved = mergeContact(data.contact || data.data || data.content?.contact || contact);
       setContact(saved);

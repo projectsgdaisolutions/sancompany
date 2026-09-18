@@ -26,7 +26,7 @@ const AdminLayout = ({
     const token = localStorage.getItem('adminToken');
     if (token) {
       try {
-        await fetch(`${import.meta.env.VITE_API_URL}/api/auth/logout.php`, {
+        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/logout.php`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,

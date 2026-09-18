@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import type { CareerContent, CareerFormData } from "../types";
+import { readApiJson } from "../services/api";
 
 const API_BASE =
   import.meta.env.VITE_API_URL ||
-  "http://localhost:8000";
+  "";
 
 /* =========================================================
    FALLBACK
@@ -98,7 +99,7 @@ export default function Careers() {
           return;
         }
 
-        const json = await response.json();
+        const json = await readApiJson(response, 'Careers');
 
         const serverCareer: Partial<CareerContent> | null =
           json?.career &&

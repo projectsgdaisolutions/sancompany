@@ -14,11 +14,9 @@ import {
 import { Link } from 'react-router-dom';
 
 import { uploadToCloudinary } from '../services/cloudinary';
+import { readApiJson } from '../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
-const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || '';
-
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 /* =========================================================
    ASSETS LOOKUP FOR INITIAL VALUES MATCHING HOME.JSX
 ========================================================= */
@@ -268,13 +266,6 @@ function normalizeCoupleStories(savedItems: unknown, fallback: HomeCoupleItem[])
   return Array.isArray(savedItems) ? (savedItems as HomeCoupleItem[]) : fallback;
 }
 
-function cloudinaryThumbnail(url: string): string {
-  if (!url || !url.includes('res.cloudinary.com') || !url.includes('/upload/')) {
-    return url;
-  }
-  return url.replace('/upload/', '/upload/f_auto,q_auto,w_500/');
-}
-
 function BulkFilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
   const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
 
@@ -384,11 +375,6 @@ function ImageUploader({
       setError('Please select a valid image file.');
       return;
     }
-    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-      setError('Cloudinary config missing. Check .env variables.');
-      return;
-    }
-
     try {
       setUploading(true);
       setError('');
@@ -560,11 +546,6 @@ function VideoUploader({
       return;
     }
 
-    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-      setError('Cloudinary config missing. Check .env variables.');
-      return;
-    }
-
     try {
       setUploading(true);
       setError('');
@@ -572,7 +553,7 @@ function VideoUploader({
 
       // IMPORTANT:
       // No frontend video-size limit is applied here.
-      // The centralized Cloudinary service handles large videos
+      // The centralized server service handles large videos
       // using chunked uploads and retries failed chunks.
       const result = await uploadToCloudinary(
         file,
@@ -929,7 +910,7 @@ const HomePageManagement = () => {
       setSaveMsg('');
       const response = await fetch(`${API_BASE_URL}/api/content.php`);
       if (!response.ok) throw new Error('Failed to load content from database');
-      const data = await response.json();
+      const data = await readApiJson(response, 'Home content');
       if (data?.success && data?.content) {
         const merged = mergeWithSaved(initialData, data.content.home || data.content);
         setContent(merged);
@@ -1218,7 +1199,7 @@ const HomePageManagement = () => {
         `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(slug)}&include_inactive=1`,
         { headers: galleryHeaders() }
       );
-      const data = await response.json();
+      const data = await readApiJson(response, 'Gallery media');
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Failed to load story photos.');
       }
@@ -1297,7 +1278,7 @@ const HomePageManagement = () => {
     for (const file of files) {
       try {
         const result = await uploadToCloudinary(file, folder);
-        if (!result?.url) throw new Error('Cloudinary did not return a secure URL.');
+        if (!result?.url) throw new Error('Server did not return a secure URL.');
         itemsToInsert.push({
             category: `gallery:${slug}`,
             title: file.name.replace(/\.[^/.]+$/, ''),
@@ -1327,14 +1308,14 @@ const HomePageManagement = () => {
           headers: galleryHeaders(true),
           body: JSON.stringify({ items: itemsToInsert }),
         });
-        const data = await response.json();
+        const data = await readApiJson(response, 'Gallery media');
         if (!response.ok || !data.success) {
           throw new Error(data.message || 'Failed to save photos in MySQL.');
         }
       } catch (error: unknown) {
         failed += uploaded;
         uploaded = 0;
-        setErrMsg(getErrorMessage(error, 'Cloudinary upload succeeded but MySQL save failed.'));
+        setErrMsg(getErrorMessage(error, 'Server upload succeeded but MySQL save failed.'));
       }
     }
 
@@ -1350,7 +1331,7 @@ const HomePageManagement = () => {
       headers: galleryHeaders(true),
       body: JSON.stringify({ id: photoId, ...payload }),
     });
-    const data = await response.json();
+    const data = await readApiJson(response, 'Gallery media');
     if (!response.ok || !data.success) throw new Error(data.message || 'Failed to update photo.');
     await fetchCouplePhotos(slug);
   };
@@ -1395,7 +1376,7 @@ const HomePageManagement = () => {
         method: 'DELETE',
         headers: galleryHeaders(),
       });
-      const data = await response.json();
+      const data = await readApiJson(response, 'Gallery media');
       if (!response.ok || !data.success) throw new Error(data.message || 'Failed to remove photo.');
       await fetchCouplePhotos(slug);
       setSaveMsg('Photo removed.');
@@ -1426,7 +1407,7 @@ const HomePageManagement = () => {
       headers: galleryHeaders(true),
       body: JSON.stringify({ action: 'reorder', items }),
     });
-    const data = await response.json();
+    const data = await readApiJson(response, 'Gallery media');
     if (!response.ok || !data.success) throw new Error(data.message || 'Failed to save photo order.');
   };
 
@@ -1631,7 +1612,7 @@ const HomePageManagement = () => {
         }),
       });
 
-      const data = await response.json();
+      const data = await readApiJson(response, 'Home content');
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Failed to save Home page content.');
       }
@@ -1785,7 +1766,7 @@ const HomePageManagement = () => {
               return (
                 <div key={photo.id} className={`overflow-hidden rounded border bg-white ${photo.isActive ? 'border-neutral-200' : 'border-dashed border-neutral-400 opacity-60'}`}>
                   <div className="aspect-square bg-neutral-100">
-                    <img src={cloudinaryThumbnail(photo.imageUrl)} alt={photo.title || `Photo ${slotIndex + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                    <img src={photo.imageUrl} alt={photo.title || `Photo ${slotIndex + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 border-t border-neutral-100 p-1.5">
                     <label title="Replace photo" className="flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-lg border border-neutral-200 bg-white px-1 text-[9px] font-semibold uppercase tracking-wider text-neutral-600 transition hover:bg-neutral-100 active:scale-95">
@@ -1977,7 +1958,7 @@ const HomePageManagement = () => {
                       onChange={(url) => updateSlider(index, 'image', url)}
                       alt={slide.title || `Slide ${index + 1}`}
                       aspect="landscape"
-                      placeholder="Slide Image URL / Cloudinary link"
+                      placeholder="Slide Image URL / Server link"
                     />
 
                     <Field

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uploadToCloudinary } from '../services/cloudinary';
 import type { BlogContent, BlogPost } from '../types';
+import { readApiJson } from '../services/api';
 import weddingFilmUrl from '../assets/portfolio/wedding/VIDEOS/KAPIL PAYAL WEDDING FILM HIGH CORRECTION.MP4';
 
 // =========================================================
@@ -18,13 +19,7 @@ import weddingFilmUrl from '../assets/portfolio/wedding/VIDEOS/KAPIL PAYAL WEDDI
 // =========================================================
 
 const BLOG_API_URL =
-    import.meta.env.VITE_PHP_API_URL || 'http://localhost:8000';
-
-const CLOUDINARY_CLOUD_NAME =
-    import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
-
-const CLOUDINARY_UPLOAD_PRESET =
-    import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || '';
+    import.meta.env.VITE_PHP_API_URL || '';
 
 // =========================================================
 // LOCAL DEFAULT MEDIA — same source as Blog.jsx
@@ -382,11 +377,6 @@ function ImageUploader({
             return;
         }
 
-        if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-            setError('Cloudinary config missing. Check .env variables.');
-            return;
-        }
-
         try {
             setUploading(true);
             setError('');
@@ -400,7 +390,7 @@ function ImageUploader({
             );
 
             if (!result?.url) {
-                throw new Error('No Cloudinary URL returned.');
+                throw new Error('No server URL returned.');
             }
 
             onChange(result.url);
@@ -658,7 +648,7 @@ function VideoUploader({ value, onChange, title }: { value: string; onChange: (v
             );
 
             if (!result?.url) {
-                throw new Error('No Cloudinary URL returned.');
+                throw new Error('No server URL returned.');
             }
 
             onChange(result.url);
@@ -760,7 +750,7 @@ function VideoUploader({ value, onChange, title }: { value: string; onChange: (v
                         label="Video URL"
                         value={urlDraft}
                         onChange={setUrlDraft}
-                        placeholder="Paste Cloudinary or external video URL"
+                        placeholder="Paste server or external video URL"
                     />
                     <div className="flex flex-wrap gap-2">
                         <button
@@ -832,7 +822,7 @@ const BlogManagement = () => {
                 },
             });
 
-            const data = await res.json();
+            const data = await readApiJson(res, 'Blog');
 
             if (!res.ok || !data.success) {
                 throw new Error(
@@ -1057,7 +1047,7 @@ const BlogManagement = () => {
                 }
             );
 
-            const data = await res.json();
+            const data = await readApiJson(res, 'Blog');
 
             if (!res.ok || !data.success) {
                 if (res.status === 401) {
@@ -1084,7 +1074,7 @@ const BlogManagement = () => {
                 }
             );
 
-            const verifyData = await verifyRes.json();
+            const verifyData = await readApiJson(verifyRes, 'Blog verification');
 
             if (
                 !verifyRes.ok ||

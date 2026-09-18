@@ -67,6 +67,15 @@ function createAdminSession(PDO $pdo, int $adminId): string {
 function requireAdminAuth(): array {
     // 1. Get Authorization header
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if ($authHeader === '' && function_exists('getallheaders')) {
+        foreach (getallheaders() as $headerName => $headerValue) {
+            if (strcasecmp($headerName, 'Authorization') === 0) {
+                $authHeader = (string) $headerValue;
+                break;
+            }
+        }
+    }
+
     if (strpos($authHeader, 'Bearer ') !== 0) {
         errorResponse('Authentication required', 401);
     }

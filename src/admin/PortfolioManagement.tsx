@@ -7,16 +7,11 @@ import React, {
 } from 'react'
 
 import { uploadToCloudinary } from '../services/cloudinary'
+import { readApiJson } from '../services/api'
 
 const PORTFOLIO_API_URL =
     import.meta.env.VITE_PHP_API_URL ||
-    'http://localhost:8000'
-
-const CLOUDINARY_CLOUD_NAME =
-    import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || ''
-
-const CLOUDINARY_UPLOAD_PRESET =
-    import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || ''
+    ''
 
 const MAX_STORY_IMAGES = 30
 
@@ -384,16 +379,6 @@ function VideoUploader({
             return
         }
 
-        if (
-            !CLOUDINARY_CLOUD_NAME ||
-            !CLOUDINARY_UPLOAD_PRESET
-        ) {
-            setError(
-                'Cloudinary config missing. Check VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET.'
-            )
-            return
-        }
-
         try {
             setUploading(true)
             setError('')
@@ -409,7 +394,7 @@ function VideoUploader({
 
             if (!result?.url) {
                 throw new Error(
-                    'Cloudinary did not return a video URL.'
+                    'Server did not return a video URL.'
                 )
             }
 
@@ -458,7 +443,7 @@ function VideoUploader({
 
                 <div className="absolute left-3 top-3 rounded-lg bg-black/75 px-3 py-2 text-[8px] font-semibold uppercase tracking-[0.18em] text-white">
                     {value
-                        ? 'Cloudinary video'
+                        ? 'Uploaded video'
                         : fallbackSrc
                             ? 'Current local video'
                             : 'No video'}
@@ -537,7 +522,7 @@ function VideoUploader({
                 <p className="text-[11px] leading-5 text-neutral-500">
                     Current Portfolio video is still using the
                     local asset. Uploading a replacement stores
-                    the new Cloudinary URL permanently.
+                    the new server URL permanently.
                 </p>
             )}
 
@@ -545,7 +530,7 @@ function VideoUploader({
                 label="Video URL"
                 value={value}
                 onChange={onChange}
-                placeholder="Cloudinary video URL"
+                placeholder="Server video URL"
             />
 
             {error && (
@@ -658,16 +643,6 @@ function StoryImageManager({
             )
         }
 
-        if (
-            !CLOUDINARY_CLOUD_NAME ||
-            !CLOUDINARY_UPLOAD_PRESET
-        ) {
-            setError(
-                'Cloudinary config missing. Check VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET.'
-            )
-            return
-        }
-
         try {
             setUploading(true)
             setProgress(0)
@@ -701,7 +676,7 @@ function StoryImageManager({
 
                 if (!result?.url) {
                     throw new Error(
-                        `Cloudinary did not return a URL for ${file.name}.`
+                        `Server did not return a URL for ${file.name}.`
                     )
                 }
 
@@ -746,16 +721,6 @@ function StoryImageManager({
             return
         }
 
-        if (
-            !CLOUDINARY_CLOUD_NAME ||
-            !CLOUDINARY_UPLOAD_PRESET
-        ) {
-            setError(
-                'Cloudinary config missing. Check VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET.'
-            )
-            return
-        }
-
         try {
             setReplacingIndex(index)
             setError('')
@@ -769,7 +734,7 @@ function StoryImageManager({
 
             if (!result?.url) {
                 throw new Error(
-                    'Cloudinary did not return an image URL.'
+                    'Server did not return an image URL.'
                 )
             }
 
@@ -933,7 +898,7 @@ function StoryImageManager({
                 <div className="mt-4 rounded-xl border border-neutral-200 bg-[#fbfaf7] p-4">
                     <div className="flex items-center justify-between gap-3">
                         <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-neutral-700">
-                            Uploading to Cloudinary
+                            Uploading to server
                         </p>
 
                         <span className="text-xs font-medium text-neutral-600">
@@ -1530,7 +1495,7 @@ const PortfolioManagement = () => {
                         )
 
                     const data =
-                        await res.json()
+                        await readApiJson(res, 'Portfolio')
 
                     if (
                         !res.ok ||
@@ -1676,7 +1641,7 @@ const PortfolioManagement = () => {
                 let data: { success?: boolean; message?: string; portfolio?: unknown }
 
                 try {
-                    data = await res.json()
+                    data = await readApiJson(res, 'Portfolio')
                 } catch {
                     throw new Error(
                         `PHP API returned an invalid response (${res.status}).`

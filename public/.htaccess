@@ -1,0 +1,13 @@
+RewriteEngine On
+
+# Preserve the bearer token for PHP on Apache/cPanel.
+RewriteCond %{HTTP:Authorization} ^(.+)
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+
+# Let PHP endpoints, uploaded files, and build assets pass through unchanged.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Vite/React client-side routes resolve through the app shell.
+RewriteRule ^ index.html [L]

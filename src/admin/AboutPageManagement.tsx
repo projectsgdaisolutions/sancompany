@@ -1,14 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uploadToCloudinary } from '../services/cloudinary';
 import type { AboutContent, TeamMember } from '../types';
+import { readApiJson } from '../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_PHP_API_URL || 'http://localhost:8000';
-
-const CLOUDINARY_CLOUD_NAME =
-    import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
-
-const CLOUDINARY_UPLOAD_PRESET =
-    import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || '';
+const API_BASE_URL = import.meta.env.VITE_PHP_API_URL || '';
 
 /* =========================================================
    TEAM ASSETS
@@ -304,16 +299,6 @@ function ImageUploader({
             return;
         }
 
-        if (
-            !CLOUDINARY_CLOUD_NAME ||
-            !CLOUDINARY_UPLOAD_PRESET
-        ) {
-            setError(
-                'Cloudinary configuration is missing.'
-            );
-            return;
-        }
-
         try {
             setUploading(true);
             setError('');
@@ -327,7 +312,7 @@ function ImageUploader({
 
             if (!result?.url) {
                 throw new Error(
-                    'Cloudinary did not return an image URL.'
+                    'Server did not return an image URL.'
                 );
             }
 
@@ -408,7 +393,7 @@ function ImageUploader({
             </div>
 
             <Field
-                label="Image URL / Cloudinary URL"
+                label="Image URL / Server URL"
                 value={value}
                 onChange={onChange}
                 placeholder="Paste image URL"
@@ -461,7 +446,7 @@ const AboutPageManagement = () => {
                 `${API_BASE_URL}/api/about.php`
             );
 
-            const data = await response.json();
+            const data = await readApiJson(response, 'About');
 
             if (!response.ok || !data?.success) {
                 throw new Error(
@@ -707,7 +692,7 @@ const AboutPageManagement = () => {
             );
 
             const data =
-                await response.json();
+                await readApiJson(response, 'About');
 
             if (
                 !response.ok ||

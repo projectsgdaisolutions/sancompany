@@ -16,6 +16,7 @@ import {
   useMotionValue,
 } from 'framer-motion'
 import type { CloudinaryUploadResult } from '../services/cloudinary'
+import { readApiJson } from '../services/api'
 
 interface PortfolioImage {
   url: string;
@@ -56,7 +57,7 @@ type LightboxState =
 
 const PORTFOLIO_API_URL =
     import.meta.env.VITE_PHP_API_URL ||
-    'http://localhost:8000'
+    ''
 
 /* =========================================================
    ASSET IMPORTS
@@ -850,7 +851,7 @@ function Portfolio() {
     const fetchPortfolio = async () => {
       try {
         const res = await fetch(`${PORTFOLIO_API_URL}/api/portfolio.php`)
-        const data = await res.json()
+        const data = await readApiJson(res, 'Portfolio')
         if (isMounted && data.success && data.portfolio) {
           const remote = data.portfolio
           

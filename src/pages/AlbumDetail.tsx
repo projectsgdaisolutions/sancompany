@@ -3,9 +3,10 @@ import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import type { GalleryCouple, GalleryPhoto } from "../types";
+import { readApiJson } from "../services/api";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8000";
+  import.meta.env.VITE_API_URL || "";
 
 /* =========================================================
    FALLBACK COUPLES
@@ -84,7 +85,7 @@ export default function AlbumDetail() {
             `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(slug || "")}`
           );
           if (photosRes.ok) {
-            const photosData = await photosRes.json();
+            const photosData = await readApiJson(photosRes, 'Gallery photos');
             if (photosData.success) {
               if (photosData.album) {
                 matchedCouple = photosData.album;
@@ -107,7 +108,7 @@ export default function AlbumDetail() {
           try {
             const contentRes = await fetch(`${API_BASE_URL}/api/content.php`);
             if (contentRes.ok) {
-              const contentData = await contentRes.json();
+              const contentData = await readApiJson(contentRes, 'Gallery content');
               const savedCouples = contentData.content?.gallery?.couples;
               const savedRecent = contentData.content?.gallery?.recentAlbums;
               if (Array.isArray(savedCouples)) {

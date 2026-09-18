@@ -4,6 +4,9 @@
  * backend/php/config/database.php
  */
 
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
 /**
  * Load environment variables from a .env file if it exists
  *

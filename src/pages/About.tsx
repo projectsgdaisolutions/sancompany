@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { motion, useInView } from 'framer-motion'
 import type { AboutContent } from '../types'
+import { readApiJson } from '../services/api'
 
-const API_BASE_URL = import.meta.env.VITE_PHP_API_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_PHP_API_URL || ''
 
 /* =========================================================
    TEAM IMAGES
@@ -250,7 +251,7 @@ function About() {
     const loadContent = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/about.php`)
-        const data = await res.json()
+        const data = await readApiJson(res, 'About')
         if (isMounted && data?.success && data?.content?.about) {
           const remote = data.content.about
           setAboutData({

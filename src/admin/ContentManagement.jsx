@@ -2,6 +2,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { readApiJson } from '../services/api';
 
 /* =========================================================
    API
@@ -9,7 +10,7 @@ import React, {
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  "http://localhost:8000";
+  "";
 
 /* =========================================================
    DEFAULT SERVICES
@@ -305,7 +306,7 @@ const ContentManagement = () => {
         `${API_BASE_URL}/api/content.php`
       );
 
-      const data = await response.json();
+      const data = await readApiJson(response, 'Content');
 
       if (
         !response.ok ||
@@ -537,7 +538,7 @@ const ContentManagement = () => {
       );
 
       const data =
-        await response.json();
+        await readApiJson(response, 'Content');
 
       if (
         !response.ok ||

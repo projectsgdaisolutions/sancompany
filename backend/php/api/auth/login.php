@@ -30,8 +30,11 @@ $password = $data['password'];
 
 try {
     $pdo = getDbConnection();
-    $stmt = $pdo->prepare('SELECT id, username, password FROM admins WHERE username = :username');
-    $stmt->execute([':username' => $username]);
+    $stmt = $pdo->prepare('SELECT id, username, password FROM admins WHERE username = :username OR LOWER(email) = LOWER(:email) LIMIT 1');
+    $stmt->execute([
+        ':username' => $username,
+        ':email' => $username,
+    ]);
     $admin = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$admin || !verifyPassword($password, $admin['password'])) {

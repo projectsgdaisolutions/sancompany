@@ -8,9 +8,10 @@ import {
   useInView,
 } from "framer-motion";
 import type { GalleryCouple } from "../types";
+import { readApiJson } from "../services/api";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8000";
+  import.meta.env.VITE_API_URL || "";
 
 /* =========================================================
    DEFAULT COUPLES
@@ -469,7 +470,7 @@ function Gallery() {
         if (!response.ok) {
           throw new Error(`Content request failed: ${response.status}`);
         }
-        const data = await response.json();
+        const data = await readApiJson(response, 'Gallery');
         if (isMounted && data.success && data.content?.gallery) {
           setGalleryContent(mergeGallery(data.content.gallery));
         }

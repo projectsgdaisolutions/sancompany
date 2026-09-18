@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { readApiJson } from '../services/api'
 import type { BlogContent, BlogPost } from '../types'
 import {
   ArrowRight,
@@ -10,7 +11,7 @@ import {
 import weddingFilmUrl from '../assets/portfolio/wedding/VIDEOS/KAPIL PAYAL WEDDING FILM HIGH CORRECTION.MP4'
 
 const BLOG_API_URL =
-  import.meta.env.VITE_PHP_API_URL || 'http://localhost:8000'
+  import.meta.env.VITE_PHP_API_URL || ''
 
 /* =========================================================
    DYNAMIC ASSET IMPORTS
@@ -545,7 +546,7 @@ function Blog() {
           }
 
           const data =
-            await response.json()
+            await readApiJson(response, 'Blog')
 
           if (!data.success) {
             throw new Error(

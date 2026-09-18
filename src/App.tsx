@@ -40,6 +40,7 @@ import FilmManagement from "./admin/FilmManagement";
 import BlogManagement from "./admin/BlogManagement";
 import ContactManagement from "./admin/ContactManagement";
 import CareerManagement from "./admin/CareerManagement";
+import { readApiJson } from "./services/api";
 
 /* =====================================================
    ADMIN PROTECTED ROUTE
@@ -62,18 +63,22 @@ function ProtectedAdmin({
       return;
     }
     // Verify token with PHP backend
-    fetch(`${import.meta.env.VITE_API_URL}/api/auth/me.php`, {
+    fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/me.php`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
       },
     })
-      .then(res => {
-        if (res.ok) {
-          setChecking(false);
-        } else if (res.status === 401) {
+      .then(async res => {
+        if (res.status === 401) {
           localStorage.removeItem('adminToken');
           navigate('/admin/login', { replace: true });
+          return;
+        }
+
+        await readApiJson(res, 'Admin session');
+        if (res.ok) {
+          setChecking(false);
         } else {
           // Other errors: keep token but stop checking to avoid block
           setChecking(false);

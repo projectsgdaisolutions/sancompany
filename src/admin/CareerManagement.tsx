@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { CareerContent, CareerField } from "../types";
 
 const API_BASE =
-  import.meta.env.VITE_API_URL || "http://localhost:8000";
+  import.meta.env.VITE_API_URL || "";
 
 const DEFAULT_CAREER: CareerContent = {
   pageTitle: "Career Page",

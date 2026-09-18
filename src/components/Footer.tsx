@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { FaInstagram, FaFacebookF, FaLinkedinIn, FaYoutube } from 'react-icons/fa'
+import { readApiJson } from '../services/api'
 
 /* =========================================================
    API (Make sure this matches your main app's API URL)
 ========================================================= */
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  'http://localhost:8000'
+  ''
 
 // Changed font to match the rest of the site
 const FONT_DISPLAY = "'Fraunces', 'Iowan Old Style', Georgia, serif"
@@ -32,7 +33,7 @@ function Footer() {
     const fetchSocialMedia = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/content.php`)
-        const data = await response.json()
+        const data = await readApiJson(response, 'Footer content')
         if (data.success && data.content && data.content.contact) {
           const contact = data.content.contact
           setSocialMedia({

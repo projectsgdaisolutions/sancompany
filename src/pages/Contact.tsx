@@ -10,12 +10,13 @@ import {
   FaInstagram,
   FaYoutube,
 } from 'react-icons/fa'
+import { readApiJson } from '../services/api'
 
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { ContactFormData } from '../types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 /* =========================================================
    DESIGN TOKENS & FONTS
@@ -119,7 +120,7 @@ function Contact() {
     const fetchContent = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/contact.php`)
-        const data = await response.json()
+        const data = await readApiJson(response, 'Contact')
 
         const remote = data.contact || data.data || data.content?.contact
         if (isMounted && data.success && remote) {

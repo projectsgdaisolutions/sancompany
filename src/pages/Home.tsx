@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
+import { readApiJson } from '../services/api'
 
 import {
   ChevronLeft,
@@ -71,7 +72,7 @@ interface HomeApiContent {
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  'http://localhost:8000'
+  ''
 
 /* =========================================================
    HERO IMAGES
@@ -841,7 +842,7 @@ function Home() {
         }
 
         const data =
-          await response.json()
+          await readApiJson(response, 'Home')
 
         if (
           data?.success &&
