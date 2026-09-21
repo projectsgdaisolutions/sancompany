@@ -1,3 +1,5 @@
+import { API_URL, buildApiUrl } from './api';
+
 export interface CloudinaryUploadResult {
     url: string;
     publicId: string;
@@ -12,7 +14,7 @@ export interface CloudinaryUploadResult {
 
 type ProgressHandler = ((progress: number) => void) | null;
 
-const API_BASE_URL = import.meta.env.VITE_PHP_API_URL || '';
+const API_BASE_URL = API_URL;
 const CHUNK_SIZE = 10 * 1024 * 1024;
 const CHUNK_RETRY_LIMIT = 3;
 
@@ -26,7 +28,7 @@ const getAuthHeaders = () => {
 const buildUploadOptions = (formData: FormData, onProgress: ProgressHandler, method: 'POST' = 'POST') => {
     return new Promise<{ ok: boolean; status: number; payload: any }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open(method, `${API_BASE_URL}/api/media/upload.php`);
+        xhr.open(method, buildApiUrl(API_BASE_URL, 'api/media/upload.php'));
         const headers = getAuthHeaders();
         if (headers.Authorization) {
             xhr.setRequestHeader('Authorization', headers.Authorization);
@@ -77,7 +79,7 @@ const uploadChunkToServer = async (
 
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${API_BASE_URL}/api/media/upload-chunk.php`);
+        xhr.open('POST', buildApiUrl(API_BASE_URL, 'api/media/upload-chunk.php'));
         const headers = getAuthHeaders();
         if (headers.Authorization) {
             xhr.setRequestHeader('Authorization', headers.Authorization);
@@ -119,7 +121,7 @@ const finalizeChunkUpload = async (sessionId: string, filename: string, folder: 
     formData.append('category', category);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE_URL}/api/media/upload-chunk.php`);
+    xhr.open('POST', buildApiUrl(API_BASE_URL, 'api/media/upload-chunk.php'));
     const headers = getAuthHeaders();
     if (headers.Authorization) {
         xhr.setRequestHeader('Authorization', headers.Authorization);
@@ -303,7 +305,10 @@ export async function uploadToCloudinary(
 
     const response = await buildUploadOptions(formData, onProgress, 'POST');
     if (!response.ok || !response.payload?.success) {
-        throw new Error(response.payload?.message || 'Server upload failed.');
+        throw new Error(
+            response.payload?.message ||
+            `Server upload failed (${response.status}).`
+        );
     }
 
     const media = response.payload.media;

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo/san.logo.png";
 import loginBg from "../assets/login_bg.png";
-import { readApiJson } from "../services/api";
+import { apiUrl, readApiJson } from "../services/api";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
@@ -49,7 +49,7 @@ const AdminLogin = () => {
     try {
       setLoading(true);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/login.php`, {
+      const response = await fetch(apiUrl("/api/auth/login.php"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

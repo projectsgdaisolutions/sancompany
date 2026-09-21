@@ -1,9 +1,9 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { motion, useInView } from 'framer-motion'
 import type { AboutContent } from '../types'
-import { readApiJson } from '../services/api'
+import { API_URL, readApiJson } from '../services/api'
 
-const API_BASE_URL = import.meta.env.VITE_PHP_API_URL || ''
+const API_BASE_URL = API_URL
 
 /* =========================================================
    TEAM IMAGES

@@ -21,34 +21,6 @@ handleCors();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 /**
- * Make sure the career column exists.
- *
- * This is only a safety fallback for the current migration.
- * It does not modify or delete any existing website content.
- */
-function ensureCareerColumn(PDO $pdo): void
-{
-    $stmt = $pdo->prepare(
-        "SELECT COUNT(*)
-         FROM INFORMATION_SCHEMA.COLUMNS
-         WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME = 'website_content'
-         AND COLUMN_NAME = 'career'"
-    );
-
-    $stmt->execute();
-
-    $exists = (int) $stmt->fetchColumn();
-
-    if ($exists === 0) {
-        $pdo->exec(
-            "ALTER TABLE website_content
-             ADD COLUMN career LONGTEXT NULL"
-        );
-    }
-}
-
-/**
  * Decode stored Career JSON safely.
  */
 function decodeCareerJson(?string $json): array
@@ -67,8 +39,6 @@ function decodeCareerJson(?string $json): array
  */
 function getCareerContent(PDO $pdo): array
 {
-    ensureCareerColumn($pdo);
-
     $stmt = $pdo->query(
         "SELECT career
          FROM website_content
@@ -90,8 +60,6 @@ function getCareerContent(PDO $pdo): array
  */
 function saveCareerContent(PDO $pdo, array $career): void
 {
-    ensureCareerColumn($pdo);
-
     $json = json_encode(
         $career,
         JSON_UNESCAPED_UNICODE |
@@ -273,10 +241,8 @@ function handlePut(PDO $pdo): void
             $pdo->rollBack();
         }
 
-        errorResponse(
-            'Career save failed: ' . $e->getMessage(),
-            500
-        );
+        error_log('Career save failed: ' . $e->getMessage());
+        errorResponse('Career save failed.', 500);
     }
 }
 
@@ -314,8 +280,6 @@ try {
 
 } catch (Throwable $e) {
 
-    errorResponse(
-        'Career API error: ' . $e->getMessage(),
-        500
-    );
+    error_log('Career API error: ' . $e->getMessage());
+    errorResponse('Career API error.', 500);
 }

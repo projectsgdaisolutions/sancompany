@@ -10,13 +10,13 @@ import {
   FaInstagram,
   FaYoutube,
 } from 'react-icons/fa'
-import { readApiJson } from '../services/api'
+import { API_URL, readApiJson } from '../services/api'
 
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import type { ContactFormData } from '../types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+const API_BASE_URL = API_URL
 
 /* =========================================================
    DESIGN TOKENS & FONTS

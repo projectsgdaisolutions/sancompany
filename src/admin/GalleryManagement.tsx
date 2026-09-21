@@ -23,6 +23,7 @@ import {
 
 import { uploadToCloudinary } from "../services/cloudinary";
 import type { GalleryCouple, GalleryPhoto } from "../types";
+import { API_URL } from "../services/api";
 
 interface GalleryAdminAlbum extends GalleryCouple {
   id: string;
@@ -67,8 +68,7 @@ interface GalleryApiResponse {
   [key: string]: unknown;
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "";
+const API_BASE_URL = API_URL;
 
 const MAX_CARDS = 16;
 const MAX_COUPLES_CARDS = 12;

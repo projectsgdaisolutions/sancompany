@@ -16,7 +16,7 @@ import {
   useMotionValue,
 } from 'framer-motion'
 import type { CloudinaryUploadResult } from '../services/cloudinary'
-import { readApiJson } from '../services/api'
+import { API_URL, readApiJson } from '../services/api'
 
 interface PortfolioImage {
   url: string;
@@ -55,9 +55,7 @@ type LightboxState =
   | { type: 'video'; src: string }
   | null;
 
-const PORTFOLIO_API_URL =
-    import.meta.env.VITE_PHP_API_URL ||
-    ''
+const PORTFOLIO_API_URL = API_URL
 
 /* =========================================================
    ASSET IMPORTS

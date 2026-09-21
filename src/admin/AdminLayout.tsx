@@ -6,6 +6,7 @@ import {
 } from "react-router-dom";
 
 import logo from "../assets/logo/san.logo.png";
+import { apiUrl } from "../services/api";
 
 const AdminLayout = ({
   children,
@@ -26,7 +27,7 @@ const AdminLayout = ({
     const token = localStorage.getItem('adminToken');
     if (token) {
       try {
-        await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/logout.php`, {
+        await fetch(apiUrl("/api/auth/logout.php"), {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,

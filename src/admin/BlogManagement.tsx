@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uploadToCloudinary } from '../services/cloudinary';
 import type { BlogContent, BlogPost } from '../types';
-import { readApiJson } from '../services/api';
+import { API_URL, readApiJson } from '../services/api';
 import weddingFilmUrl from '../assets/portfolio/wedding/VIDEOS/KAPIL PAYAL WEDDING FILM HIGH CORRECTION.MP4';
 
 // =========================================================
@@ -18,8 +18,7 @@ import weddingFilmUrl from '../assets/portfolio/wedding/VIDEOS/KAPIL PAYAL WEDDI
 // React Admin -> PHP /api/blog.php -> MySQL website_content.blog
 // =========================================================
 
-const BLOG_API_URL =
-    import.meta.env.VITE_PHP_API_URL || '';
+const BLOG_API_URL = API_URL;
 
 // =========================================================
 // LOCAL DEFAULT MEDIA — same source as Blog.jsx

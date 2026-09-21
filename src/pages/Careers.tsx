@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from "react";
 import type { CareerContent, CareerFormData } from "../types";
-import { readApiJson } from "../services/api";
+import { API_URL, readApiJson } from "../services/api";
 
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  "";
+const API_BASE = API_URL;
 const CAREERS_WHATSAPP_NUMBER = "919359338557";
 
 /* =========================================================

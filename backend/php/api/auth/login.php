@@ -20,13 +20,22 @@ if (stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') === false) {
 }
 
 $rawInput = file_get_contents('php://input');
-$data = json_decode($rawInput, true);
-if (!is_array($data) || empty($data['username']) || empty($data['password'])) {
+try {
+    $data = json_decode($rawInput ?: '', true, 512, JSON_THROW_ON_ERROR);
+} catch (JsonException $e) {
+    errorResponse('Invalid JSON request body', 400);
+}
+
+if (!is_array($data)) {
     errorResponse('Username and password are required', 400);
 }
 
-$username = $data['username'];
-$password = $data['password'];
+$username = trim((string) ($data['username'] ?? ''));
+$password = (string) ($data['password'] ?? '');
+
+if ($username === '' || $password === '') {
+    errorResponse('Username and password are required', 400);
+}
 
 try {
     $pdo = getDbConnection();

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uploadToCloudinary } from '../services/cloudinary';
 import type { AboutContent, TeamMember } from '../types';
-import { readApiJson } from '../services/api';
+import { API_URL, readApiJson } from '../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_PHP_API_URL || '';
+const API_BASE_URL = API_URL;
 
 /* =========================================================
    TEAM ASSETS

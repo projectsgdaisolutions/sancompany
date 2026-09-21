@@ -9,7 +9,7 @@ import {
   Maximize2,
   X,
 } from "lucide-react";
-import { readApiJson } from "../services/api";
+import { API_URL, readApiJson } from "../services/api";
 
 interface FilmItem {
   id?: string | number;
@@ -38,9 +38,7 @@ type FilmCategory = "All" | "Recent Cinema" | "Wedding Films" | "Cinematic Stori
    API
 ========================================================= */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  "";
+const API_BASE_URL = API_URL;
 
 /* =========================================================
    DEFAULT CONTENT

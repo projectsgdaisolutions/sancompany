@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import logo from "../assets/logo/san.logo.png";
 import loginBg from "../assets/login_bg.png";
-import { readApiJson } from "../services/api";
+import { apiUrl, readApiJson } from "../services/api";
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -25,7 +25,7 @@ const ForgotPassword = () => {
     try {
       setLoading(true);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/forgot-password.php`, {
+      const response = await fetch(apiUrl("/api/auth/forgot-password.php"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

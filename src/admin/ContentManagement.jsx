@@ -2,15 +2,13 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { readApiJson } from '../services/api';
+import { API_URL, readApiJson } from '../services/api';
 
 /* =========================================================
    API
 ========================================================= */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  "";
+const API_BASE_URL = API_URL;
 
 /* =========================================================
    DEFAULT SERVICES

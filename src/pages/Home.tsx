@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
-import { readApiJson } from '../services/api'
+import { API_URL, buildApiUrl, readApiJson } from '../services/api'
 
 import {
   ChevronLeft,
@@ -70,9 +70,7 @@ interface HomeApiContent {
    API
 ========================================================= */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  ''
+const API_BASE_URL = API_URL
 
 /* =========================================================
    HERO IMAGES
@@ -828,7 +826,7 @@ function Home() {
       try {
         const response =
           await fetch(
-            `${API_BASE_URL}/api/content.php`,
+            buildApiUrl(API_BASE_URL, 'api/content.php'),
             {
               signal:
                 controller.signal,
@@ -894,8 +892,8 @@ function Home() {
 
   const activeSlides =
     useMemo(() => {
-      if (content?.home && Array.isArray(content.home.slides)) {
-        return content.home.slides.map((s, i) => ({
+      if (homeContent.slides.length > 0) {
+        return homeContent.slides.filter((s) => s?.image || s?.url).map((s, i) => ({
           id: s.id || `slide-${i}`,
           image: typeof s === 'string' ? s : s.image || s.url || '',
         }))
@@ -949,23 +947,14 @@ function Home() {
   }, [])
 
   const collageImagesToRender = useMemo(() => {
-    if (content?.home && Array.isArray(content.home.collage?.images)) {
-      return content.home.collage.images
-        .filter((image) => typeof image === 'string' || image.visible !== false)
-        .map((image) => (typeof image === 'string' ? image : image?.url || image?.image))
-        .filter(Boolean)
-    }
-    if (
-      Array.isArray(homeContent.collage?.images) &&
-      homeContent.collage.images.length > 0
-    ) {
+    if (homeContent.collage.images.length > 0) {
       return homeContent.collage.images
         .filter((image) => typeof image === 'string' || image.visible !== false)
         .map((image) => (typeof image === 'string' ? image : image?.url || image?.image))
         .filter(Boolean)
     }
     return allPortfolioImages
-  }, [content?.home, homeContent.collage?.images, allPortfolioImages])
+  }, [homeContent.collage?.images, allPortfolioImages])
 
   /* =====================================================
      COLLAGE SLIDER (Pages of images, repeats images to
@@ -1032,10 +1021,10 @@ function Home() {
   ===================================================== */
 
   const couplesToRender = useMemo(() => {
-    return Array.isArray(content?.home?.couples?.items)
-      ? content.home.couples.items.slice(0, 6)
+    return Array.isArray(homeContent.couples?.items)
+      ? homeContent.couples.items.slice(0, 6)
       : []
-  }, [content?.home, homeContent.couples?.items])
+  }, [homeContent.couples?.items])
 
   /* =====================================================
      VIDEOS TO RENDER (Dynamic list of videos - Strictly 4)
@@ -1047,13 +1036,7 @@ function Home() {
   }, [])
 
   const videosToRender = useMemo(() => {
-    if (content?.home && Array.isArray(content.home.videos?.items)) {
-      return content.home.videos.items.slice(0, 4)
-    }
-    if (
-      Array.isArray(homeContent.videos?.items) &&
-      homeContent.videos.items.length > 0
-    ) {
+    if (Array.isArray(homeContent.videos?.items) && homeContent.videos.items.length > 0) {
       return homeContent.videos.items.slice(0, 4)
     }
     
@@ -1068,7 +1051,7 @@ function Home() {
       })
     }
     return items
-  }, [content?.home, homeContent.videos?.items, defaultVideoUrls])
+  }, [homeContent.videos?.items, defaultVideoUrls])
 
   /* =====================================================
      SLIDER

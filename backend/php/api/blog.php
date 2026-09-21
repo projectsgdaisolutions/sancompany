@@ -248,10 +248,8 @@ function handlePut(PDO $pdo): void
             $pdo->rollBack();
         }
 
-        errorResponse(
-            'Blog save failed: ' . $e->getMessage(),
-            500
-        );
+        error_log('Blog save failed: ' . $e->getMessage());
+        errorResponse('Blog save failed.', 500);
     }
 }
 
@@ -284,8 +282,6 @@ try {
     }
 
 } catch (Throwable $e) {
-    errorResponse(
-        'Blog API error: ' . $e->getMessage(),
-        500
-    );
+    error_log('Blog API error: ' . $e->getMessage());
+    errorResponse('Blog API error.', 500);
 }

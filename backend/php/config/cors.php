@@ -11,11 +11,17 @@ function handleCors(): void
         'http://localhost:5174',
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
+        'https://sanphoto.com',
     ];
+
+    $configuredOrigin = trim((string) (getenv('FRONTEND_URL') ?: ''));
+    if ($configuredOrigin !== '') {
+        $allowedOrigins[] = rtrim($configuredOrigin, '/');
+    }
 
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-    if (in_array($origin, $allowedOrigins, true)) {
+    if (in_array(rtrim($origin, '/'), array_unique($allowedOrigins), true)) {
         header("Access-Control-Allow-Origin: {$origin}");
         header('Access-Control-Allow-Credentials: true');
     }

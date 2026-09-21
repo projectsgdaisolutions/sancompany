@@ -359,10 +359,8 @@ function handlePut(PDO $pdo): void
             $pdo->rollBack();
         }
 
-        errorResponse(
-            'Contact save failed: ' . $e->getMessage(),
-            500
-        );
+        error_log('Contact save failed: ' . $e->getMessage());
+        errorResponse('Contact save failed.', 500);
     }
 }
 
@@ -395,8 +393,6 @@ try {
     }
 
 } catch (Throwable $e) {
-    errorResponse(
-        'Contact API error: ' . $e->getMessage(),
-        500
-    );
+    error_log('Contact API error: ' . $e->getMessage());
+    errorResponse('Contact API error.', 500);
 }

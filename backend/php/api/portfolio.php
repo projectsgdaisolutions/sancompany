@@ -828,10 +828,8 @@ function handlePut(PDO $pdo): void
             $pdo->rollBack();
         }
 
-        errorResponse(
-            'Portfolio save failed: ' . $e->getMessage(),
-            500
-        );
+        error_log('Portfolio save failed: ' . $e->getMessage());
+        errorResponse('Portfolio save failed.', 500);
     }
 }
 
@@ -862,8 +860,6 @@ try {
     }
 
 } catch (Throwable $e) {
-    errorResponse(
-        'Portfolio API error: ' . $e->getMessage(),
-        500
-    );
+    error_log('Portfolio API error: ' . $e->getMessage());
+    errorResponse('Portfolio API error.', 500);
 }

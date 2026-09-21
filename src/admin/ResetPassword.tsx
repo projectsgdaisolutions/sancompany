@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/logo/san.logo.png";
 import loginBg from "../assets/login_bg.png";
-import { readApiJson } from "../services/api";
+import { apiUrl, readApiJson } from "../services/api";
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -50,7 +50,7 @@ const ResetPassword = () => {
     try {
       setLoading(true);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/reset-password.php`, {
+      const response = await fetch(apiUrl("/api/auth/reset-password.php"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

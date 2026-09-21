@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import type { CareerContent, CareerField } from "../types";
+import { API_URL } from "../services/api";
 
-const API_BASE =
-  import.meta.env.VITE_API_URL || "";
+const API_BASE = API_URL;
 
 const DEFAULT_CAREER: CareerContent = {
   pageTitle: "Career Page",

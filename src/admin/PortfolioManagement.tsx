@@ -7,11 +7,9 @@ import React, {
 } from 'react'
 
 import { uploadToCloudinary } from '../services/cloudinary'
-import { readApiJson } from '../services/api'
+import { API_URL, readApiJson } from '../services/api'
 
-const PORTFOLIO_API_URL =
-    import.meta.env.VITE_PHP_API_URL ||
-    ''
+const PORTFOLIO_API_URL = API_URL
 
 const MAX_STORY_IMAGES = 30
 

@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS `website_content` (
   `films` JSON DEFAULT NULL COMMENT 'Wedding films page data, heroVideoUrl, heroVideoText, statement, and film items array',
   `blog` JSON DEFAULT NULL COMMENT 'Blog page intro, featured story, latest stories, posts array, and CTA',
   `contact` JSON DEFAULT NULL COMMENT 'Contact page intro, details, service options array, FAQ, and map embed link',
+  `career` JSON DEFAULT NULL COMMENT 'Career page content and application information',
   `service_list` JSON DEFAULT NULL COMMENT 'Default or custom services list (01 Wedding, 02 Pre-Wedding, etc.)',
   `process` JSON DEFAULT NULL COMMENT 'Process steps array (01 Consultation, 02 Shoot, 03 Delivery)',
   `posts` JSON DEFAULT NULL COMMENT 'Root blog articles and news entries list',

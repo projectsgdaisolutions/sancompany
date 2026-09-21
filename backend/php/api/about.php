@@ -218,10 +218,8 @@ function handlePut(PDO $pdo): void
             $pdo->rollBack();
         }
 
-        errorResponse(
-            'About save failed: ' . $e->getMessage(),
-            500
-        );
+        error_log('About save failed: ' . $e->getMessage());
+        errorResponse('About save failed.', 500);
     }
 }
 
@@ -254,8 +252,6 @@ try {
     }
 
 } catch (Throwable $e) {
-    errorResponse(
-        'About API error: ' . $e->getMessage(),
-        500
-    );
+    error_log('About API error: ' . $e->getMessage());
+    errorResponse('About API error.', 500);
 }

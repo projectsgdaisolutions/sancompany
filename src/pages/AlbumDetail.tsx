@@ -3,10 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import type { GalleryCouple, GalleryPhoto } from "../types";
-import { readApiJson } from "../services/api";
+import { API_URL, readApiJson } from "../services/api";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "";
+const API_BASE_URL = API_URL;
 
 /* =========================================================
    FALLBACK COUPLES

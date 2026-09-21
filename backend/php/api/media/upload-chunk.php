@@ -29,7 +29,8 @@ if ($action === 'finalize') {
         $metadata = finalizeChunkUpload($sessionId, $filename, $folder, $category, $totalChunks);
         successResponse('Chunk upload finalized.', ['media' => $metadata]);
     } catch (Throwable $e) {
-        errorResponse($e->getMessage(), 400);
+        error_log('Chunk upload finalization failed: ' . $e->getMessage());
+        errorResponse('Chunk upload finalization failed.', 400);
     }
 }
 
@@ -38,8 +39,14 @@ if (!isset($_FILES['file']) || !is_array($_FILES['file'])) {
 }
 
 $chunkIndex = (int) ($_POST['chunk_index'] ?? $_GET['chunk_index'] ?? 0);
+if ($chunkIndex < 0) {
+    errorResponse('Chunk index is invalid.', 400);
+}
 if ($totalChunks < 1) {
     errorResponse('Total chunk count is required.', 400);
+}
+if ((int) ($_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+    errorResponse('Chunk upload failed.', 400);
 }
 if ($sessionId === '') {
     $sessionId = bin2hex(random_bytes(16));
@@ -58,5 +65,6 @@ try {
         'file' => basename($partPath),
     ]);
 } catch (Throwable $e) {
-    errorResponse($e->getMessage(), 400);
+    error_log('Chunk upload failed: ' . $e->getMessage());
+    errorResponse('Chunk upload failed.', 400);
 }

@@ -40,7 +40,7 @@ import FilmManagement from "./admin/FilmManagement";
 import BlogManagement from "./admin/BlogManagement";
 import ContactManagement from "./admin/ContactManagement";
 import CareerManagement from "./admin/CareerManagement";
-import { readApiJson } from "./services/api";
+import { apiUrl, readApiJson } from "./services/api";
 
 /* =====================================================
    ADMIN PROTECTED ROUTE
@@ -63,7 +63,7 @@ function ProtectedAdmin({
       return;
     }
     // Verify token with PHP backend
-    fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/me.php`, {
+    fetch(apiUrl('/api/auth/me.php'), {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,

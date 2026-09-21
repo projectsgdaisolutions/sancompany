@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { FaInstagram, FaFacebookF, FaLinkedinIn, FaYoutube } from 'react-icons/fa'
-import { readApiJson } from '../services/api'
+import { API_URL, readApiJson } from '../services/api'
 
 /* =========================================================
    API (Make sure this matches your main app's API URL)
 ========================================================= */
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  ''
+const API_BASE_URL = API_URL
 
 // Changed font to match the rest of the site
 const FONT_DISPLAY = "'Fraunces', 'Iowan Old Style', Georgia, serif"

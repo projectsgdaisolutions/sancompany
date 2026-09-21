@@ -22,13 +22,13 @@ import {
     Eye,
     EyeOff,
 } from "lucide-react";
+import { API_URL } from "../services/api";
 
 /* =========================================================
    API
 ========================================================= */
 
-const API_BASE_URL =
-    import.meta.env.VITE_API_URL || "";
+const API_BASE_URL = API_URL;
 
 const FILM_CATEGORIES: FilmCategory[] = [
     "Recent Cinema",

@@ -46,10 +46,11 @@ function loadEnv(string $path): void {
     }
 }
 
-// Auto-load .env from backend/php/.env, backend/.env, or the project root.
+// Load local overrides first; production can continue using server environment
+// variables or backend/php/.env without exposing credentials to the frontend.
+loadEnv(__DIR__ . '/../.env.local');
 loadEnv(__DIR__ . '/../.env');
 loadEnv(__DIR__ . '/../../.env');
-loadEnv(__DIR__ . '/../../../.env');
 
 /**
  * Obtain a shared PDO MySQL connection

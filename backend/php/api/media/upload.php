@@ -23,5 +23,6 @@ try {
     $metadata = saveServerMedia($_FILES['file'], $folder, $category);
     successResponse('Media uploaded successfully.', ['media' => $metadata]);
 } catch (Throwable $e) {
-    errorResponse($e->getMessage(), 400);
+    error_log('Media upload failed: ' . $e->getMessage());
+    errorResponse('Media upload failed.', 400);
 }

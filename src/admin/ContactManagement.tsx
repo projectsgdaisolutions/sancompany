@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { readApiJson } from '../services/api';
+import { API_URL, readApiJson } from '../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = API_URL;
 
 // DEFAULT CONTACT DATA — exact values from Contact.jsx (Source of Truth)
 const DEFAULT_CONTACT = {

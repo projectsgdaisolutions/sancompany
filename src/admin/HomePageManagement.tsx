@@ -14,9 +14,9 @@ import {
 import { Link } from 'react-router-dom';
 
 import { uploadToCloudinary } from '../services/cloudinary';
-import { readApiJson } from '../services/api';
+import { API_URL, buildApiUrl, readApiJson } from '../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = API_URL;
 /* =========================================================
    ASSETS LOOKUP FOR INITIAL VALUES MATCHING HOME.JSX
 ========================================================= */
@@ -908,7 +908,7 @@ const HomePageManagement = () => {
       setLoading(true);
       setErrMsg('');
       setSaveMsg('');
-      const response = await fetch(`${API_BASE_URL}/api/content.php`);
+      const response = await fetch(buildApiUrl(API_BASE_URL, 'api/content.php'));
       if (!response.ok) throw new Error('Failed to load content from database');
       const data = await readApiJson(response, 'Home content');
       if (data?.success && data?.content) {
@@ -1196,7 +1196,7 @@ const HomePageManagement = () => {
     setCoupleLoading((prev) => ({ ...prev, [slug]: true }));
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(slug)}&include_inactive=1`,
+        `${buildApiUrl(API_BASE_URL, 'api/gallery.php')}?slug=${encodeURIComponent(slug)}&include_inactive=1`,
         { headers: galleryHeaders() }
       );
       const data = await readApiJson(response, 'Gallery media');
@@ -1303,7 +1303,7 @@ const HomePageManagement = () => {
 
     if (itemsToInsert.length) {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/gallery.php`, {
+        const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
           method: 'POST',
           headers: galleryHeaders(true),
           body: JSON.stringify({ items: itemsToInsert }),
@@ -1326,7 +1326,7 @@ const HomePageManagement = () => {
   };
 
   const updateCouplePhoto = async (slug: string, photoId: string | number, payload: Record<string, unknown>) => {
-    const response = await fetch(`${API_BASE_URL}/api/gallery.php`, {
+    const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
       method: 'PUT',
       headers: galleryHeaders(true),
       body: JSON.stringify({ id: photoId, ...payload }),
@@ -1372,7 +1372,7 @@ const HomePageManagement = () => {
   const removeCouplePhoto = async (slug: string, photoId: string | number) => {
     if (!window.confirm('Remove this photo from the story?')) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/gallery.php?id=${encodeURIComponent(photoId)}`, {
+      const response = await fetch(`${buildApiUrl(API_BASE_URL, 'api/gallery.php')}?id=${encodeURIComponent(photoId)}`, {
         method: 'DELETE',
         headers: galleryHeaders(),
       });
@@ -1402,7 +1402,7 @@ const HomePageManagement = () => {
   };
 
   const updateCouplePhotoOrder = async (items: Array<{ id: string | number; order: number }>) => {
-    const response = await fetch(`${API_BASE_URL}/api/gallery.php`, {
+    const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
       method: 'PUT',
       headers: galleryHeaders(true),
       body: JSON.stringify({ action: 'reorder', items }),
@@ -1601,7 +1601,7 @@ const HomePageManagement = () => {
       setSaveMsg('');
       setErrMsg('');
 
-      const response = await fetch(`${API_BASE_URL}/api/content.php`, {
+      const response = await fetch(buildApiUrl(API_BASE_URL, 'api/content.php'), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
