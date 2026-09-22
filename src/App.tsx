@@ -125,6 +125,38 @@ function PublicLayout({
 ===================================================== */
 
 function App() {
+  useEffect(() => {
+    const toggleVideoPlayback = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest('button, a, input, select, textarea')) {
+        return;
+      }
+
+      let video: HTMLVideoElement | null = target instanceof HTMLVideoElement ? target : null;
+      let container: Element | null = target.parentElement;
+      while (!video && container) {
+        const videos = container.querySelectorAll('video');
+        if (videos.length === 1) {
+          video = videos[0];
+        }
+        container = container.parentElement;
+      }
+
+      if (!video) {
+        return;
+      }
+
+      if (video.paused) {
+        void video.play().catch(() => undefined);
+      } else {
+        video.pause();
+      }
+    };
+
+    document.addEventListener('click', toggleVideoPlayback);
+    return () => document.removeEventListener('click', toggleVideoPlayback);
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

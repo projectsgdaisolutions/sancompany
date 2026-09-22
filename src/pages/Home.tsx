@@ -1450,93 +1450,161 @@ function Home() {
           </div>
         </section>
 
-        {/* ===============================================
-            03 — COLLAGE (Zero Gaps, Small Horizontal Rectangle Section)
-        =============================================== */}
+    {/* ===============================================
+  03 — COLLAGE
+=============================================== */}
 
-        <section
-          id="collage"
-          className="px-4 py-6 sm:px-10 sm:py-8 lg:px-14 lg:py-8"
-          style={{ backgroundColor: COLOR.paper }}
+<section
+  id="collage"
+  className="px-4 py-6 sm:px-10 sm:py-8 lg:px-14 lg:py-8"
+  style={{ backgroundColor: COLOR.paper }}
+>
+  <div className="mx-auto mb-5 max-w-6xl text-center">
+    <p
+      className="text-base sm:text-lg md:text-xl font-light leading-6 sm:leading-9 text-[#2B2824] max-w-3xl mx-auto"
+      style={{ fontFamily: FONT_DISPLAY }}
+    >
+      {homeContent.collage.heading}
+    </p>
+
+    <p className="mt-3 sm:mt-4 text-[9px] uppercase tracking-[0.42em] text-[#9B7B45]">
+      {homeContent.collage.eyebrow}
+    </p>
+  </div>
+
+  <FadeIn className="relative mx-auto max-w-6xl">
+    {/* Same overall responsive ratio as the Hero */}
+    <div
+      className="
+        relative
+        w-full
+        aspect-[9/4]
+        sm:aspect-[4/1]
+        md:aspect-[5/1]
+        lg:aspect-[32/15]
+        overflow-hidden
+        bg-black
+      "
+    >
+   {/* Sliding collage pages */}
+<div
+  className="flex h-full w-full transition-transform duration-700 ease-out"
+  style={{
+    width: `${collagePageCount * 100}%`,
+    transform: `translateX(-${
+      (100 / collagePageCount) * collagePage
+    }%)`,
+  }}
+>
+  {collagePages.map((page, pageIndex) => (
+    <div
+      key={`collage-page-${pageIndex}`}
+   className="grid h-full grid-cols-8 grid-rows-3 gap-0 sm:grid-cols-6 sm:grid-rows-4 lg:grid-cols-8 lg:grid-rows-3"
+      style={{
+        width: `${100 / collagePageCount}%`,
+        flexShrink: 0,
+      }}
+    >
+      {page.map((src, index) => (
+        <div
+          key={`collage-${pageIndex}-${index}`}
+          className="relative min-h-0 min-w-0 overflow-hidden bg-black"
         >
-          <div className="mx-auto mb-5 max-w-6xl text-center">
-            <p
-              className="text-base sm:text-lg md:text-xl font-light leading-6 sm:leading-9 text-[#2B2824] max-w-3xl mx-auto"
-              style={{ fontFamily: FONT_DISPLAY }}
-            >
-              {homeContent.collage.heading}
-            </p>
-            <p className="mt-3 sm:mt-4 text-[9px] uppercase tracking-[0.42em] text-[#9B7B45]">
-              {homeContent.collage.eyebrow}
-            </p>
-          </div>
+          <img
+            src={src}
+            alt={`SAN Wedding ${
+              pageIndex * COLLAGE_PAGE_SIZE + index + 1
+            }`}
+            className="block h-full w-full object-cover object-center"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      ))}
+    </div>
+  ))}
+</div>
 
-          <FadeIn className="relative mx-auto max-w-6xl">
-            <div className="overflow-hidden">
-              <div
-                className="flex transition-transform duration-700 ease-out"
-                style={{
-                  width: `${collagePageCount * 100}%`,
-                  transform: `translateX(-${
-                    (100 / collagePageCount) * collagePage
-                  }%)`,
-                }}
-              >
-                {collagePages.map((page, pageIndex) => (
-                  <div
-                    key={`collage-page-${pageIndex}`}
-                    // Gap is set to gap-0 to remove all spaces between images
-                    className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-8 gap-0 px-0"
-                    style={{
-                      width: `${100 / collagePageCount}%`,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {page.map((src, index) => (
-                      <div
-                        key={`collage-${pageIndex}-${index}`}
-                        // Increased height for desktop view (lg:aspect-[4/5] makes it taller)
-                        className="group relative overflow-hidden bg-black aspect-[3/2] lg:aspect-[4/5]"
-                      >
-                        <img
-                          src={src}
-                          alt={`SAN Wedding ${pageIndex * COLLAGE_PAGE_SIZE + index + 1}`}
-                          className="w-full h-full object-cover transition duration-700 group-hover:scale-110"
-                          loading="lazy"
-                          decoding="async"
-                          style={{ willChange: 'transform' }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
+      {/* Previous */}
+      {collagePageCount > 1 && (
+        <button
+          type="button"
+          onClick={prevCollagePage}
+          aria-label="Previous collage page"
+          className="
+            absolute
+            left-2
+            top-1/2
+            z-10
+            flex
+            h-9
+            w-9
+            -translate-y-1/2
+            items-center
+            justify-center
+            rounded-full
+            border
+            border-black/25
+            bg-white/80
+            text-black
+            backdrop-blur-sm
+            transition
+            hover:border-black
+            hover:bg-black
+            hover:text-white
+            sm:left-3
+            sm:h-10
+            sm:w-10
+          "
+        >
+          <ChevronLeft
+            size={16}
+            strokeWidth={1.4}
+          />
+        </button>
+      )}
 
-            {collagePageCount > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={prevCollagePage}
-                  aria-label="Previous collage page"
-                  className="absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-black/25 bg-white/80 text-black backdrop-blur-sm transition hover:border-black hover:bg-black hover:text-white sm:left-2 sm:h-10 sm:w-10"
-                >
-                  <ChevronLeft size={16} strokeWidth={1.4} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={nextCollagePage}
-                  aria-label="Next collage page"
-                  className="absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-black/25 bg-white/80 text-black backdrop-blur-sm transition hover:border-black hover:bg-black hover:text-white sm:right-2 sm:h-10 sm:w-10"
-                >
-                  <ChevronRight size={16} strokeWidth={1.4} />
-                </button>
-              </>
-            )}
-          </FadeIn>
-        </section>
-
+      {/* Next */}
+      {collagePageCount > 1 && (
+        <button
+          type="button"
+          onClick={nextCollagePage}
+          aria-label="Next collage page"
+          className="
+            absolute
+            right-2
+            top-1/2
+            z-10
+            flex
+            h-9
+            w-9
+            -translate-y-1/2
+            items-center
+            justify-center
+            rounded-full
+            border
+            border-black/25
+            bg-white/80
+            text-black
+            backdrop-blur-sm
+            transition
+            hover:border-black
+            hover:bg-black
+            hover:text-white
+            sm:right-3
+            sm:h-10
+            sm:w-10
+          "
+        >
+          <ChevronRight
+            size={16}
+            strokeWidth={1.4}
+          />
+        </button>
+      )}
+    </div>
+  </FadeIn>
+</section>
         {/* ===============================================
             04 — COUPLES GRID (3 by 3 on all devices)
         =============================================== */}

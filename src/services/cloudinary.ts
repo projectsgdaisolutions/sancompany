@@ -17,6 +17,7 @@ type ProgressHandler = ((progress: number) => void) | null;
 const API_BASE_URL = API_URL;
 const CHUNK_SIZE = 10 * 1024 * 1024;
 const CHUNK_RETRY_LIMIT = 3;
+const MAX_VIDEO_SIZE = 2000 * 1024 * 1024;
 
 const getAuthHeaders = () => {
     const token = localStorage.getItem('adminToken');
@@ -28,7 +29,7 @@ const getAuthHeaders = () => {
 const buildUploadOptions = (formData: FormData, onProgress: ProgressHandler, method: 'POST' = 'POST') => {
     return new Promise<{ ok: boolean; status: number; payload: any }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open(method, buildApiUrl(API_BASE_URL, 'api/media/upload.php'));
+        xhr.open(method, buildApiUrl(API_BASE_URL, 'api/media-api/upload.php'));
         const headers = getAuthHeaders();
         if (headers.Authorization) {
             xhr.setRequestHeader('Authorization', headers.Authorization);
@@ -65,9 +66,12 @@ const uploadChunkToServer = async (
     totalChunks: number,
     folder: string,
     category: string,
-    uploadedBefore: number,
+    filename: string,
+    mimeType: string,
     totalSize: number,
-    onProgress: ProgressHandler
+    uploadedBefore: number,
+    onProgress: ProgressHandler,
+    highestProgress: { value: number }
 ): Promise<{ ok: boolean; status: number; payload: any }> => {
     const formData = new FormData();
     formData.append('file', file, file instanceof File ? file.name : `chunk-${chunkIndex}`);
@@ -76,10 +80,13 @@ const uploadChunkToServer = async (
     formData.append('total_chunks', String(totalChunks));
     formData.append('folder', folder);
     formData.append('category', category);
+    formData.append('original_filename', filename);
+    formData.append('mime_type', mimeType);
+    formData.append('total_size', String(totalSize));
 
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', buildApiUrl(API_BASE_URL, 'api/media/upload-chunk.php'));
+        xhr.open('POST', buildApiUrl(API_BASE_URL, 'api/media-api/upload-chunk.php'));
         const headers = getAuthHeaders();
         if (headers.Authorization) {
             xhr.setRequestHeader('Authorization', headers.Authorization);
@@ -93,7 +100,8 @@ const uploadChunkToServer = async (
                 Math.round(((uploadedBefore + event.loaded) / totalSize) * 100),
                 99
             );
-            onProgress(progress);
+            highestProgress.value = Math.max(highestProgress.value, progress);
+            onProgress(highestProgress.value);
         });
 
         xhr.addEventListener('load', () => {
@@ -121,7 +129,7 @@ const finalizeChunkUpload = async (sessionId: string, filename: string, folder: 
     formData.append('category', category);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', buildApiUrl(API_BASE_URL, 'api/media/upload-chunk.php'));
+    xhr.open('POST', buildApiUrl(API_BASE_URL, 'api/media-api/upload-chunk.php'));
     const headers = getAuthHeaders();
     if (headers.Authorization) {
         xhr.setRequestHeader('Authorization', headers.Authorization);
@@ -231,14 +239,15 @@ export async function uploadToCloudinary(
     const category = safeFolder;
     const uploadFile = isImage ? await optimizeImage(file) : file;
 
-    if (onProgress) {
-        onProgress(5);
-    }
-
     if (isVideo && uploadFile.size > CHUNK_SIZE) {
+        if (uploadFile.size > MAX_VIDEO_SIZE) {
+            throw new Error('Video exceeds the allowed 2 GB upload size.');
+        }
+
         const totalChunks = Math.ceil(uploadFile.size / CHUNK_SIZE);
         const sessionId = crypto?.randomUUID?.() || `serverbyt-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         let uploadedBefore = 0;
+        const highestProgress = { value: 0 };
 
         for (let i = 0; i < totalChunks; i += 1) {
             const start = i * CHUNK_SIZE;
@@ -256,9 +265,13 @@ export async function uploadToCloudinary(
                         totalChunks,
                         safeFolder,
                         category,
+                        uploadFile.name,
+                        uploadFile.type,
+                        uploadFile.size,
                         uploadedBefore,
                         uploadFile.size,
-                        onProgress
+                        onProgress,
+                        highestProgress
                     );
 
                     if (response.ok && response.payload?.success) {
@@ -296,6 +309,12 @@ export async function uploadToCloudinary(
             originalSize: file.size,
             uploadedSize: uploadFile.size,
         };
+    }
+
+    if (onProgress && isVideo) {
+        onProgress(0);
+    } else if (onProgress) {
+        onProgress(5);
     }
 
     const formData = new FormData();

@@ -1166,14 +1166,6 @@ function StoryImageManager({
                 </div>
             )}
 
-            <div className="mt-5 rounded-xl border border-[#e6dccb] bg-[#faf7f0] px-4 py-3 text-[11px] leading-5 text-[#74634d]">
-                <strong>Persistence:</strong> Hide/Show changes only
-                the saved visibility state. The Cloudinary asset and
-                MySQL media record are kept. Replace uploads a new
-                Cloudinary image while preserving the same position
-                and visibility state. Remove deletes the old Portfolio
-                media slot when you press <strong>Save Changes</strong>.
-            </div>
         </div>
     )
 }

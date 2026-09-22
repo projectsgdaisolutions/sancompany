@@ -308,12 +308,26 @@ function deleteMediaFileByRelativePath(string $relativePath): bool {
     return unlink($location);
 }
 
-function writeChunkFile(string $sessionId, int $chunkIndex, array $file): string {
+function chunkSessionDirectory(string $sessionId): string {
+    return mediaStorageRoot() . DIRECTORY_SEPARATOR . '.tmp' . DIRECTORY_SEPARATOR . preg_replace('/[^A-Za-z0-9._-]+/', '-', $sessionId);
+}
+
+function writeChunkFile(string $sessionId, int $chunkIndex, array $file, array $manifest): string {
     $root = mediaStorageRoot() . DIRECTORY_SEPARATOR . '.tmp';
     ensureDirectory($root);
 
-    $sessionDir = $root . DIRECTORY_SEPARATOR . preg_replace('/[^A-Za-z0-9._-]+/', '-', $sessionId);
+    $sessionDir = chunkSessionDirectory($sessionId);
     ensureDirectory($sessionDir);
+
+    $manifestPath = $sessionDir . DIRECTORY_SEPARATOR . 'manifest.json';
+    if (is_file($manifestPath)) {
+        $existing = json_decode((string) file_get_contents($manifestPath), true);
+        if (!is_array($existing) || $existing !== $manifest) {
+            throw new InvalidArgumentException('Upload session metadata does not match.');
+        }
+    } elseif (file_put_contents($manifestPath, json_encode($manifest, JSON_THROW_ON_ERROR), LOCK_EX) === false) {
+        throw new RuntimeException('Unable to create upload session metadata.');
+    }
 
     $partPath = $sessionDir . DIRECTORY_SEPARATOR . 'chunk-' . $chunkIndex . '.part';
     if (!move_uploaded_file($file['tmp_name'], $partPath)) {
@@ -323,14 +337,28 @@ function writeChunkFile(string $sessionId, int $chunkIndex, array $file): string
     return $partPath;
 }
 
+function cleanupChunkSession(string $sessionId): void {
+    $sessionDir = chunkSessionDirectory($sessionId);
+    if (!is_dir($sessionDir)) {
+        return;
+    }
+
+    foreach (glob($sessionDir . DIRECTORY_SEPARATOR . '*') ?: [] as $file) {
+        if (is_file($file)) {
+            @unlink($file);
+        }
+    }
+    @rmdir($sessionDir);
+}
+
 function finalizeChunkUpload(string $sessionId, string $filename, string $folder, string $category, int $totalChunks): array {
-    $sessionDir = mediaStorageRoot() . DIRECTORY_SEPARATOR . '.tmp' . DIRECTORY_SEPARATOR . preg_replace('/[^A-Za-z0-9._-]+/', '-', $sessionId);
+    $sessionDir = chunkSessionDirectory($sessionId);
     if (!is_dir($sessionDir)) {
         throw new InvalidArgumentException('Upload session not found or expired.');
     }
 
     $chunkFiles = [];
-    foreach (glob($sessionDir . DIRECTORY_SEPARATOR . 'chunk-*.part') as $chunkFile) {
+    foreach (glob($sessionDir . DIRECTORY_SEPARATOR . 'chunk-*.part') ?: [] as $chunkFile) {
         $chunkFiles[] = $chunkFile;
     }
 
@@ -341,6 +369,14 @@ function finalizeChunkUpload(string $sessionId, string $filename, string $folder
 
     if ($totalChunks < 1 || count($chunkFiles) !== $totalChunks) {
         throw new InvalidArgumentException('Upload is incomplete. Please retry the missing chunks.');
+    }
+
+    $manifest = json_decode((string) @file_get_contents($sessionDir . DIRECTORY_SEPARATOR . 'manifest.json'), true);
+    if (!is_array($manifest) || (int) ($manifest['totalChunks'] ?? 0) !== $totalChunks) {
+        throw new InvalidArgumentException('Upload session metadata is missing or invalid.');
+    }
+    if ((string) ($manifest['filename'] ?? '') !== normalizeUploadedName($filename)) {
+        throw new InvalidArgumentException('Final filename does not match the upload session.');
     }
 
     foreach ($chunkFiles as $index => $chunkFile) {
@@ -367,7 +403,20 @@ function finalizeChunkUpload(string $sessionId, string $filename, string $folder
         throw new RuntimeException('Unable to create assembled file.');
     }
 
+    $assembledSize = 0;
     foreach ($chunkFiles as $chunkFile) {
+        $chunkSize = filesize($chunkFile);
+        if ($chunkSize === false || $chunkSize <= 0) {
+            throw new InvalidArgumentException('Upload contains an empty chunk.');
+        }
+        $assembledSize += $chunkSize;
+    }
+    if ($assembledSize !== (int) ($manifest['totalSize'] ?? 0)) {
+        throw new InvalidArgumentException('Assembled file size does not match the original upload.');
+    }
+
+    try {
+        foreach ($chunkFiles as $chunkFile) {
         $in = fopen($chunkFile, 'rb');
         if ($in === false) {
             fclose($out);
@@ -383,6 +432,12 @@ function finalizeChunkUpload(string $sessionId, string $filename, string $folder
         }
 
         fclose($in);
+        }
+    } catch (Throwable $e) {
+        fclose($out);
+        @unlink($targetPath);
+        cleanupChunkSession($sessionId);
+        throw $e;
     }
 
     fclose($out);
@@ -421,6 +476,7 @@ function finalizeChunkUpload(string $sessionId, string $filename, string $folder
     foreach ($chunkFiles as $chunkFile) {
         @unlink($chunkFile);
     }
+    @unlink($sessionDir . DIRECTORY_SEPARATOR . 'manifest.json');
     @rmdir($sessionDir);
 
     return $metadata;
