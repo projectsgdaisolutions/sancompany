@@ -110,12 +110,30 @@ export interface BlogContent {
 }
 
 export type FilmCategory = 'Recent Cinema' | 'Wedding Films' | 'Cinematic Stories';
+export type FilmCategoryId = 'recent-cinema' | 'wedding-films' | 'cinematic-stories';
+
+export const FILM_CATEGORY_DEFINITIONS = [
+  { id: 'recent-cinema', label: 'Recent Cinema', limit: 4 },
+  { id: 'wedding-films', label: 'Wedding Films', limit: 8 },
+  { id: 'cinematic-stories', label: 'Cinematic Stories', limit: 4 },
+] as const;
+
+export function normalizeFilmCategory(value: unknown): FilmCategoryId | null {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+
+  return FILM_CATEGORY_DEFINITIONS.find(
+    (category) => category.id === normalized || category.label.toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalized
+  )?.id ?? null;
+}
 
 export interface FilmItem {
   id: string;
   videoUrl: string;
   title: string;
-  category: FilmCategory;
+  category: string;
   location: string;
   date: string;
   isActive?: boolean;

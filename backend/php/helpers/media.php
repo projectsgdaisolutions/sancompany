@@ -308,6 +308,21 @@ function deleteMediaFileByRelativePath(string $relativePath): bool {
     return unlink($location);
 }
 
+function deleteMediaFileByUrl(string $url): bool {
+    if ($url === '') {
+        return false;
+    }
+
+    $parsedPath = parse_url($url, PHP_URL_PATH);
+    $path = is_string($parsedPath) ? $parsedPath : $url;
+    $idx = strpos($path, '/uploads/');
+    if ($idx === false) {
+        return false;
+    }
+
+    return deleteMediaFileByRelativePath(substr($path, $idx));
+}
+
 function chunkSessionDirectory(string $sessionId): string {
     return mediaStorageRoot() . DIRECTORY_SEPARATOR . '.tmp' . DIRECTORY_SEPARATOR . preg_replace('/[^A-Za-z0-9._-]+/', '-', $sessionId);
 }
@@ -330,6 +345,17 @@ function writeChunkFile(string $sessionId, int $chunkIndex, array $file, array $
     }
 
     $partPath = $sessionDir . DIRECTORY_SEPARATOR . 'chunk-' . $chunkIndex . '.part';
+    if (is_file($partPath)) {
+        $existingSize = filesize($partPath);
+        $incomingSize = isset($file['size']) ? (int) $file['size'] : 0;
+
+        if ($existingSize === $incomingSize && $incomingSize > 0) {
+            return $partPath;
+        }
+
+        @unlink($partPath);
+    }
+
     if (!move_uploaded_file($file['tmp_name'], $partPath)) {
         throw new RuntimeException('Unable to save chunk to temporary storage.');
     }

@@ -6,6 +6,10 @@ import React, {
     useState,
 } from "react";
 import { uploadToCloudinary } from "../services/cloudinary";
+import {
+    FILM_CATEGORY_DEFINITIONS,
+    normalizeFilmCategory,
+} from "../types";
 import type { FilmCategory, FilmItem, FilmsContent } from "../types";
 import {
     GripVertical,
@@ -31,10 +35,9 @@ import { API_URL } from "../services/api";
 const API_BASE_URL = API_URL;
 
 const FILM_CATEGORIES: FilmCategory[] = [
-    "Recent Cinema",
-    "Wedding Films",
-    "Cinematic Stories",
+    ...FILM_CATEGORY_DEFINITIONS.map((category) => category.label),
 ];
+const FILM_CATEGORY_SET = new Set<string>(FILM_CATEGORIES);
 
 const MAX_FILMS = 16;
 const FILM_CATEGORY_LIMITS: Record<FilmCategory, number> = {
@@ -46,6 +49,14 @@ const FILM_CATEGORY_LIMITS: Record<FilmCategory, number> = {
 const isPopulatedFilm = (film: FilmItem) =>
     typeof film?.videoUrl === "string" &&
     film.videoUrl.trim().length > 0;
+
+const isFilmInCategory = (film: FilmItem, category: FilmCategory) =>
+    normalizeFilmCategory(film.category) === normalizeFilmCategory(category);
+
+const canonicalFilmCategory = (value: unknown): FilmCategory | null => {
+    const categoryId = normalizeFilmCategory(value);
+    return FILM_CATEGORY_DEFINITIONS.find((category) => category.id === categoryId)?.label ?? null;
+};
 
 /* =========================================================
    DEFAULT CONTENT
@@ -80,11 +91,11 @@ const FONT_BODY =
    EMPTY FILM
 ========================================================= */
 
-const createNewFilm = (index: number): FilmItem => ({
-    id: `film-${Date.now()}-${index}`,
+const createNewFilm = (index: number, category: FilmCategory): FilmItem => ({
+    id: `film-${crypto?.randomUUID?.() || `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`}`,
     videoUrl: "",
-    title: "New Wedding Film",
-    category: "Wedding Films",
+    title: "New Film",
+    category,
     location: "",
     date: "",
     isActive: true,
@@ -104,8 +115,11 @@ const FilmManagement = () => {
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
 
-    const [uploadingId, setUploadingId] = useState<string | null>(null);
-    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadingByFilmId, setUploadingByFilmId] = useState<Record<string, boolean>>({});
+    const [uploadProgressByFilmId, setUploadProgressByFilmId] = useState<Record<string, number>>({});
+    const [uploadFileNameByFilmId, setUploadFileNameByFilmId] = useState<Record<string, string>>({});
+    const [uploadErrorByFilmId, setUploadErrorByFilmId] = useState<Record<string, string>>({});
+    const uploadStateRef = useRef<Record<string, symbol>>({});
 
     const [draggedIndex, setDraggedIndex] =
         useState<number | null>(null);
@@ -184,13 +198,24 @@ const FilmManagement = () => {
                 savedFilms &&
                 typeof savedFilms === "object"
             ) {
+                const loadedItems = Array.isArray(savedFilms.items)
+                    ? savedFilms.items
+                    : [];
+
                 setFilms({
                     ...DEFAULT_FILMS,
                     ...savedFilms,
-                    items: Array.isArray(savedFilms.items)
-                        ? savedFilms.items
-                        : [],
+                    items: loadedItems,
                 });
+
+                const invalidFilm = loadedItems.find(
+                    (film: FilmItem) => isPopulatedFilm(film) && !normalizeFilmCategory(film.category)
+                );
+                if (invalidFilm) {
+                    setError(
+                        `Film "${invalidFilm.title || "Untitled Film"}" has an invalid category. Choose a valid category before saving.`
+                    );
+                }
             } else {
                 setFilms({
                     ...DEFAULT_FILMS,
@@ -265,7 +290,7 @@ const FilmManagement = () => {
         if (field === "category") {
             const currentCategory = films.items[index]?.category;
             const categoryCount = films.items.filter(
-                (film) => film.category === value
+                (film) => normalizeFilmCategory(film.category) === normalizeFilmCategory(value)
             ).length;
             const categoryLimit = FILM_CATEGORY_LIMITS[value as FilmCategory];
 
@@ -318,9 +343,7 @@ const FilmManagement = () => {
             return;
         }
 
-        const categoryCount = films.items.filter(
-            (film) => film.category === category && isPopulatedFilm(film)
-        ).length;
+        const categoryCount = films.items.filter((film) => isFilmInCategory(film, category)).length;
 
         if (categoryCount >= FILM_CATEGORY_LIMITS[category]) {
             setError(
@@ -330,26 +353,10 @@ const FilmManagement = () => {
         }
 
         setFilms((previous) => {
-            const reusableIndex = previous.items.findIndex(
-                (film) =>
-                    !isPopulatedFilm(film) &&
-                    film.category === category
-            );
             const newFilm = {
-                ...createNewFilm(previous.items.length),
-                category: category as FilmCategory,
+                ...createNewFilm(previous.items.length, category),
                 isDraft: true,
             };
-
-            if (reusableIndex >= 0) {
-                const items = [...previous.items];
-                items[reusableIndex] = {
-                    ...items[reusableIndex],
-                    ...newFilm,
-                    id: items[reusableIndex].id || newFilm.id,
-                };
-                return { ...previous, items };
-            }
 
             return {
                 ...previous,
@@ -492,37 +499,48 @@ const FilmManagement = () => {
     const handleVideoUpload = async (file: File | undefined, index: number) => {
         if (!file) return;
 
+        const film = films.items[index];
+        if (!film || uploadStateRef.current[film.id]) return;
+
         if (!file.type.startsWith("video/")) {
-            setError(
-                "Please select a valid video file."
-            );
+            setUploadErrorByFilmId((previous) => ({ ...previous, [film.id]: "Please select a valid video file." }));
             return;
         }
 
+        const uploadToken = Symbol(film.id);
+        const filmId = film.id;
+        uploadStateRef.current[filmId] = uploadToken;
+        setUploadingByFilmId((previous) => ({ ...previous, [filmId]: true }));
+        setUploadProgressByFilmId((previous) => ({ ...previous, [filmId]: 0 }));
+        setUploadFileNameByFilmId((previous) => ({ ...previous, [filmId]: file.name }));
+        setUploadErrorByFilmId((previous) => ({ ...previous, [filmId]: "" }));
+
         try {
-            setUploadingId(
-                `film-${index}`
-            );
-            setUploadProgress(0);
-            setError("");
             setMessage("");
 
             const result =
                 await uploadToCloudinary(
                     file,
                     "san-photography/films",
-                    (progress) =>
-                        setUploadProgress(progress)
+                    (progress) => {
+                        if (uploadStateRef.current[filmId] === uploadToken) {
+                            setUploadProgressByFilmId((previous) => ({ ...previous, [filmId]: progress }));
+                        }
+                    }
                 );
 
-            updateFilm(
-                index,
-                "videoUrl",
-                result.url
-            );
+            if (uploadStateRef.current[filmId] !== uploadToken) return;
+
+            setFilms((previous) => ({
+                ...previous,
+                items: previous.items.map((item) =>
+                    item.id === filmId ? { ...item, videoUrl: result.url } : item
+                ),
+            }));
+            setUploadProgressByFilmId((previous) => ({ ...previous, [filmId]: 100 }));
 
             setMessage(
-                "Video uploaded. Save changes to publish it."
+                "Video uploaded successfully. Save changes to publish it."
             );
         } catch (err: unknown) {
             console.error(
@@ -530,12 +548,30 @@ const FilmManagement = () => {
                 err
             );
 
-            setError(
-                err instanceof Error ? err.message : "Video upload failed."
-            );
+            if (uploadStateRef.current[filmId] === uploadToken) {
+                setUploadErrorByFilmId((previous) => ({
+                    ...previous,
+                    [filmId]: err instanceof Error ? err.message : "Video upload failed.",
+                }));
+            }
         } finally {
-            setUploadingId(null);
-            setUploadProgress(0);
+            if (uploadStateRef.current[filmId] === uploadToken) {
+                window.setTimeout(() => {
+                    if (uploadStateRef.current[filmId] !== uploadToken) return;
+                    delete uploadStateRef.current[filmId];
+                    setUploadingByFilmId((previous) => ({ ...previous, [filmId]: false }));
+                    setUploadProgressByFilmId((previous) => {
+                        const next = { ...previous };
+                        delete next[filmId];
+                        return next;
+                    });
+                    setUploadFileNameByFilmId((previous) => {
+                        const next = { ...previous };
+                        delete next[filmId];
+                        return next;
+                    });
+                }, 800);
+            }
         }
     };
 
@@ -546,6 +582,9 @@ const FilmManagement = () => {
     const handleHeroVideoUpload = async (file: File | undefined) => {
         if (!file) return;
 
+        const uploadKey = "hero";
+        if (uploadStateRef.current[uploadKey]) return;
+
         if (!file.type.startsWith("video/")) {
             setError(
                 "Please select a valid video file."
@@ -553,9 +592,13 @@ const FilmManagement = () => {
             return;
         }
 
+        const uploadToken = Symbol(uploadKey);
+        uploadStateRef.current[uploadKey] = uploadToken;
+        setUploadingByFilmId((previous) => ({ ...previous, [uploadKey]: true }));
+        setUploadProgressByFilmId((previous) => ({ ...previous, [uploadKey]: 0 }));
+        setUploadFileNameByFilmId((previous) => ({ ...previous, [uploadKey]: file.name }));
+
         try {
-            setUploadingId("hero");
-            setUploadProgress(0);
             setError("");
             setMessage("");
 
@@ -563,17 +606,23 @@ const FilmManagement = () => {
                 await uploadToCloudinary(
                     file,
                     "san-photography/films/hero",
-                    (progress) =>
-                        setUploadProgress(progress)
+                    (progress) => {
+                        if (uploadStateRef.current[uploadKey] === uploadToken) {
+                            setUploadProgressByFilmId((previous) => ({ ...previous, [uploadKey]: progress }));
+                        }
+                    }
                 );
+
+            if (uploadStateRef.current[uploadKey] !== uploadToken) return;
 
             updateField(
                 "heroVideoUrl",
                 result.url
             );
 
+            setUploadProgressByFilmId((previous) => ({ ...previous, [uploadKey]: 100 }));
             setMessage(
-                "Hero video uploaded. Save changes to publish it."
+                "Hero video uploaded successfully. Save changes to publish it."
             );
         } catch (err: unknown) {
             console.error(
@@ -585,8 +634,23 @@ const FilmManagement = () => {
                 err instanceof Error ? err.message : "Hero video upload failed."
             );
         } finally {
-            setUploadingId(null);
-            setUploadProgress(0);
+            if (uploadStateRef.current[uploadKey] === uploadToken) {
+                window.setTimeout(() => {
+                    if (uploadStateRef.current[uploadKey] !== uploadToken) return;
+                    delete uploadStateRef.current[uploadKey];
+                    setUploadingByFilmId((previous) => ({ ...previous, [uploadKey]: false }));
+                    setUploadProgressByFilmId((previous) => {
+                        const next = { ...previous };
+                        delete next[uploadKey];
+                        return next;
+                    });
+                    setUploadFileNameByFilmId((previous) => {
+                        const next = { ...previous };
+                        delete next[uploadKey];
+                        return next;
+                    });
+                }, 800);
+            }
         }
     };
 
@@ -648,21 +712,19 @@ const FilmManagement = () => {
 
             const invalidFilm = actualFilms.find(
                 (film) =>
-                    !FILM_CATEGORIES.includes(
-                        film.category
-                    )
+                    !normalizeFilmCategory(film.category)
             );
 
             if (invalidFilm) {
                 throw new Error(
-                    `Invalid category for film "${invalidFilm.title || "Untitled Film"}". Please select Recent Cinema, Wedding Films or Cinematic Stories.`
+                    `Invalid category "${String(invalidFilm.category)}" for film "${invalidFilm.title || "Untitled Film"}". Please select Recent Cinema, Wedding Films or Cinematic Stories.`
                 );
             }
 
-            const categoryCountsForSave = actualFilms.reduce<Record<FilmCategory, number>>(
-                (counts, film) => ({
+            const categoryCountsForSave = FILM_CATEGORIES.reduce<Record<FilmCategory, number>>(
+                (counts, category) => ({
                     ...counts,
-                    [film.category]: (counts[film.category] || 0) + 1,
+                    [category]: actualFilms.filter((film) => isFilmInCategory(film, category)).length,
                 }),
                 { "Recent Cinema": 0, "Wedding Films": 0, "Cinematic Stories": 0 }
             );
@@ -676,15 +738,22 @@ const FilmManagement = () => {
                 );
             }
 
-            const normalizedItems =
-                films.items.map(
-                    (film, index) => ({
-                        ...film,
-                        isDraft: undefined,
-                        category: film.category,
-                        order: index,
-                    })
-                );
+            const normalizedItems = films.items.map((film, index) => {
+                const category = canonicalFilmCategory(film.category);
+
+                if (isPopulatedFilm(film) && (!category || !FILM_CATEGORY_SET.has(category))) {
+                    throw new Error(
+                        `Invalid category "${String(film.category)}" for film "${film.title || "Untitled Film"}".`
+                    );
+                }
+
+                return {
+                    ...film,
+                    isDraft: undefined,
+                    category: category || "Recent Cinema",
+                    order: index,
+                };
+            });
 
             const payload = {
                 ...films,
@@ -778,9 +847,7 @@ const FilmManagement = () => {
     const categoryCounts = useMemo(() => {
         return FILM_CATEGORIES.reduce(
             (counts, category) => {
-                counts[category] = films.items.filter(
-                    (film) => film.category === category && isPopulatedFilm(film)
-                ).length;
+                counts[category] = films.items.filter((film) => isFilmInCategory(film, category)).length;
 
                 return counts;
             },
@@ -803,7 +870,7 @@ const FilmManagement = () => {
 
         return films.items.reduce<Array<{ film: FilmItem; index: number }>>((items, film, index) => {
             if (
-                film.category === activeFilter &&
+                isFilmInCategory(film, activeFilter) &&
                 (isPopulatedFilm(film) || film.isDraft)
             ) {
                 items.push({ film, index });
@@ -1072,16 +1139,17 @@ const FilmManagement = () => {
                                     }
                                     muted
                                     loop
-                                    autoPlay
+                                    controls
                                     playsInline
+                                    preload="metadata"
                                     className="h-full w-full object-cover"
                                 />
 
-                                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-                                    <span className="rounded-full bg-black/60 px-3 py-1 text-[9px] uppercase tracking-wider text-white backdrop-blur">
-                                        Video Ready
-                                    </span>
+                                <div className="absolute left-3 top-3 max-w-[70%] truncate rounded-full bg-black/70 px-3 py-1 text-[8px] font-semibold uppercase tracking-wider text-white backdrop-blur">
+                                    Current Video: {films.heroVideoUrl.split('/').pop() || 'Hero Video'}
+                                </div>
 
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition hover:opacity-100">
                                     <button
                                         type="button"
                                         onClick={() =>
@@ -1125,16 +1193,17 @@ const FilmManagement = () => {
 
                                 event.target.value = "";
                             }}
+                            disabled={uploadingByFilmId.hero}
                         />
 
-                        {uploadingId === "hero" && (
+                        {uploadingByFilmId.hero && (
                             <div className="mt-3">
                                 <div className="mb-1 flex justify-between text-[9px] text-black/50">
                                     <span>
-                                        Uploading...
+                                        Uploading {uploadFileNameByFilmId.hero || "video"}...
                                     </span>
                                     <span>
-                                        {uploadProgress}%
+                                        {uploadProgressByFilmId.hero || 0}%
                                     </span>
                                 </div>
 
@@ -1142,7 +1211,7 @@ const FilmManagement = () => {
                                     <div
                                         className="h-full bg-[#171717] transition-all"
                                         style={{
-                                            width: `${uploadProgress}%`,
+                                            width: `${uploadProgressByFilmId.hero || 0}%`,
                                         }}
                                     />
                                 </div>
@@ -1449,15 +1518,15 @@ const FilmManagement = () => {
                                                         className="h-full w-full object-cover"
                                                     />
 
-                                                    <div className="absolute left-2 top-2 rounded-full bg-black/60 px-2.5 py-1 text-[8px] uppercase tracking-wider text-white backdrop-blur">
-                                                        <span className="flex items-center gap-1.5">
+                                                    <div className="absolute left-2 top-2 max-w-[70%] truncate rounded-full bg-black/60 px-2.5 py-1 text-[8px] uppercase tracking-wider text-white backdrop-blur">
+                                                        <span className="flex items-center gap-1.5 truncate">
                                                             <Play
                                                                 size={
                                                                     9
                                                                 }
                                                                 fill="currentColor"
                                                             />
-                                                            Video
+                                                            {film.videoUrl.split('/').pop() || 'Current Video'}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1481,9 +1550,8 @@ const FilmManagement = () => {
                                                         size={12}
                                                     />
 
-                                                    {uploadingId ===
-                                                        `film-${index}`
-                                                        ? `${uploadProgress}%`
+                                                    {uploadingByFilmId[film.id]
+                                                        ? `${uploadProgressByFilmId[film.id] || 0}%`
                                                         : film.videoUrl
                                                             ? "Replace Video"
                                                             : "Upload Video"}
@@ -1491,6 +1559,7 @@ const FilmManagement = () => {
                                                     <input
                                                         type="file"
                                                         accept="video/*"
+                                                        disabled={uploadingByFilmId[film.id]}
                                                         className="hidden"
                                                         onChange={(
                                                             event
@@ -1530,16 +1599,26 @@ const FilmManagement = () => {
                                                 )}
                                             </div>
 
-                                            {uploadingId ===
-                                                `film-${index}` && (
-                                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10">
-                                                        <div
-                                                            className="h-full bg-[#171717] transition-all"
-                                                            style={{
-                                                                width: `${uploadProgress}%`,
-                                                            }}
-                                                        />
+                                            {uploadingByFilmId[film.id] && (
+                                                    <div className="mt-2">
+                                                        <div className="mb-1 truncate text-[9px] text-black/50">
+                                                            Uploading {uploadFileNameByFilmId[film.id] || "video"}...
+                                                        </div>
+                                                        <div className="h-1.5 overflow-hidden rounded-full bg-black/10">
+                                                            <div
+                                                                className="h-full bg-[#171717] transition-all"
+                                                                style={{
+                                                                    width: `${uploadProgressByFilmId[film.id] || 0}%`,
+                                                                }}
+                                                            />
+                                                        </div>
                                                     </div>
+                                                )}
+
+                                                {uploadErrorByFilmId[film.id] && (
+                                                    <p className="mt-2 text-[9px] text-red-500">
+                                                        {uploadErrorByFilmId[film.id]}
+                                                    </p>
                                                 )}
 
                                             <input

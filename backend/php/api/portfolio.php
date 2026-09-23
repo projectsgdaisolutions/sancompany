@@ -19,6 +19,7 @@ handleCors();
 
 require_once __DIR__ . '/../helpers/response.php';
 require_once __DIR__ . '/../helpers/auth.php';
+require_once __DIR__ . '/../helpers/media.php';
 require_once __DIR__ . '/../config/database.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -505,7 +506,7 @@ function deleteRemovedPortfolioMedia(
     array $currentSlots
 ): void {
     $stmt = $pdo->query(
-        'SELECT id, slot
+        'SELECT id, slot, image_url
          FROM portfolio_media
          WHERE slot = "hero-video"
             OR slot LIKE "story-%"
@@ -530,6 +531,10 @@ function deleteRemovedPortfolioMedia(
             $delete->execute([
                 ':id' => $row['id'],
             ]);
+
+            if (!empty($row['image_url'])) {
+                deleteMediaFileByUrl((string) $row['image_url']);
+            }
         }
     }
 }

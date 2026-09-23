@@ -17,6 +17,13 @@ ini_set('log_errors', '1');
 function jsonResponse($data, int $statusCode = 200) {
     if (!headers_sent()) {
         header('Content-Type: application/json; charset=utf-8');
+        // Prevent browsers and CDN proxies from serving stale JSON that
+        // contains image / media URLs which may change when the admin
+        // uploads a replacement.  We do NOT disable image-file caching;
+        // only the JSON API responses are affected here.
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
         http_response_code($statusCode);
     }
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

@@ -76,9 +76,7 @@ const API_BASE_URL = API_URL
    HERO IMAGES
 ========================================================= */
 
-import hero1 from '../assets/hero/img1.jpg'
-import hero2 from '../assets/hero/img2.jpg'
-import hero3 from '../assets/hero/img3.jpg'
+
 
 /* =========================================================
    PORTFOLIO IMAGES
@@ -237,32 +235,23 @@ const tanmayAchal03 =
     '05'
   )
 
-const image01 =
-  kapilPayal01 || hero1
+const image01 = kapilPayal01;
 
-const image02 =
-  kapilPayal02 || hero2
+const image02 = kapilPayal02;
 
-const image03 =
-  kapilPayal03 || hero3
+const image03 = kapilPayal03;
 
-const image04 =
-  pratikMegha01 || hero1
+const image04 = pratikMegha01;
 
-const image05 =
-  pratikMegha02 || hero2
+const image05 = pratikMegha02;
 
-const image06 =
-  pratikMegha03 || hero3
+const image06 = pratikMegha03;
 
-const image07 =
-  tanmayAchal01 || hero1
+const image07 = tanmayAchal01;
 
-const image08 =
-  tanmayAchal02 || hero2
+const image08 = tanmayAchal02;
 
-const image09 =
-  tanmayAchal03 || hero3
+const image09 = tanmayAchal03;
 
 /* =========================================================
    SOUL CINEMA VIDEO (specific file from /video2/VIDEOS)
@@ -332,23 +321,23 @@ function useGoogleFonts() {
 const DEFAULT_HERO_SLIDES = [
   {
     id: 'fallback-1',
-    image: hero1,
+    image: '',
   },
   {
     id: 'fallback-2',
-    image: hero2,
+    image: '',
   },
   {
     id: 'fallback-3',
-    image: hero3,
+    image: '',
   },
 ]
 
 const DEFAULT_HOME_CONTENT: HomeContent = {
   slides: [
-    { id: 'hero-1', image: hero1 },
-    { id: 'hero-2', image: hero2 },
-    { id: 'hero-3', image: hero3 },
+    { id: 'hero-1', image: '' },
+    { id: 'hero-2', image: '' },
+    { id: 'hero-3', image: '' },
   ],
 
   about: {
@@ -636,16 +625,22 @@ function VideoCard({ videoItem, videoSrc }: VideoCardProps) {
   const [isActive, setIsActive] = useState(false);
 
   const handleVideoClick = () => {
-    if (videoRef.current) {
-      if (!isActive) {
-        setIsActive(true);
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!isActive) {
+      // First click: activate, unmute, and play from start
+      setIsActive(true);
+      video.currentTime = 0;
+      video.muted = false;
+      video.play().catch(() => {});
+    } else {
+      // Subsequent clicks: toggle play/pause
+      if (video.paused) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
       }
-      // Always play from start with sound on click
-      videoRef.current.currentTime = 0;
-      videoRef.current.muted = false;
-      videoRef.current.play().catch((err: unknown) => {
-        console.log("Autoplay with sound blocked:", err);
-      });
     }
   };
 
@@ -830,6 +825,7 @@ function Home() {
             {
               signal:
                 controller.signal,
+              cache: 'no-store',
             }
           )
 
@@ -1410,7 +1406,8 @@ function Home() {
                     src={slide.image}
                     alt="SAN Photography"
                     className="h-full w-full object-cover object-center"
-                    loading={index === 0 ? 'eager' : 'lazy'}
+                    loading={index === 0 ? 'eager' : index === 1 ? 'eager' : 'lazy'}
+                    fetchPriority={index === 0 ? 'high' : 'auto'}
                     decoding="async"
                   />
                 </div>
@@ -1516,7 +1513,8 @@ function Home() {
               pageIndex * COLLAGE_PAGE_SIZE + index + 1
             }`}
             className="block h-full w-full object-cover object-center"
-            loading="lazy"
+            loading={pageIndex === 0 ? 'eager' : 'lazy'}
+            fetchPriority={pageIndex === 0 && index < 8 ? 'high' : 'auto'}
             decoding="async"
           />
         </div>
@@ -1645,7 +1643,8 @@ function Home() {
                         src={couple.img}
                         alt={couple.name}
                         className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-[1200ms] ease-out group-hover:scale-105"
-                        loading="lazy"
+                        loading={index < 3 ? 'eager' : 'lazy'}
+                        fetchPriority={index < 3 ? 'high' : 'auto'}
                         decoding="async"
                       />
                     ) : (
@@ -1741,7 +1740,7 @@ function Home() {
                   muted
                   loop
                   playsInline
-                  preload="auto"
+                  preload="metadata"
                   className="soul-cinema-shape-video"
                 />
 

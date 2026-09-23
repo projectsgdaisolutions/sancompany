@@ -49,6 +49,7 @@ ob_start();
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../helpers/response.php';
 require_once __DIR__ . '/../helpers/auth.php';
+require_once __DIR__ . '/../helpers/media.php';
 require_once __DIR__ . '/../config/database.php';
 
 handleCors();
@@ -58,7 +59,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 const MAX_GALLERY_CARDS = 16;
 const MAX_COUPLES_CARDS = 12;
 const MAX_RECENT_CARDS = 4;
-const MAX_PHOTOS_PER_CARD = 40;
+const MAX_PHOTOS_PER_CARD = 50;
 
 
 /* =========================================================
@@ -3489,6 +3490,85 @@ try {
 
 
         /* =================================================
+           DELETE ALL MEDIA FOR A SPECIFIC CATEGORY / SLUG
+        ================================================= */
+
+        if (
+            (isset($_GET['action']) && $_GET['action'] === 'delete_all') ||
+            (isset($_GET['delete_all']) && $_GET['delete_all'] === '1')
+        ) {
+            $slug = trim((string) ($_GET['slug'] ?? ''));
+            if ($slug === '') {
+                errorResponse('Slug is required for bulk photo deletion.', 400);
+            }
+
+            $rawCategory = trim((string) ($_GET['category'] ?? ''));
+            $section = isset($_GET['section']) ? normalizeSection($_GET['section']) : null;
+
+            if ($rawCategory !== '') {
+                $category = $rawCategory;
+            } elseif ($section !== null && isset($_GET['section'])) {
+                $category = buildCategory($section, $slug);
+            } else {
+                // If section not explicitly specified, check which category exists
+                $checkRecent = $pdo->prepare('SELECT COUNT(*) FROM gallery_media WHERE category = :cat');
+                $checkRecent->execute([':cat' => 'recent:' . $slug]);
+                $recentCount = (int) $checkRecent->fetchColumn();
+
+                if ($recentCount > 0) {
+                    $category = 'recent:' . $slug;
+                } else {
+                    $category = 'gallery:' . $slug;
+                }
+            }
+
+            // Fetch media items for this category
+            $mediaStmt = $pdo->prepare(
+                'SELECT id, image_url AS imageUrl, public_id AS publicId, resource_type AS resourceType
+                 FROM gallery_media
+                 WHERE category = :category'
+            );
+            $mediaStmt->execute([':category' => $category]);
+            $mediaList = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $pdo->beginTransaction();
+
+            try {
+                $deleteStmt = $pdo->prepare('DELETE FROM gallery_media WHERE category = :category');
+                $deleteStmt->execute([':category' => $category]);
+                $deletedCount = $deleteStmt->rowCount();
+
+                $pdo->commit();
+
+                // Delete physical files from ServerByt uploads
+                foreach ($mediaList as $item) {
+                    if (!empty($item['imageUrl'])) {
+                        deleteMediaFileByUrl((string) $item['imageUrl']);
+                    }
+                }
+
+                header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+                header('Pragma: no-cache');
+                header('Expires: 0');
+
+                jsonResponse([
+                    'success' => true,
+                    'message' => 'All photos deleted successfully.',
+                    'category' => $category,
+                    'slug' => $slug,
+                    'deletedCount' => $deletedCount,
+                ], 200);
+
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $e;
+            }
+        }
+
+        /* =================================================
            DELETE SINGLE MEDIA
         ================================================= */
 
@@ -3502,16 +3582,14 @@ try {
 
 
             /*
-             * Get public_id before deleting.
-             *
-             * We return it to frontend so frontend can
-             * optionally remove the Cloudinary asset.
+             * Get public_id and image_url before deleting.
              */
             $findStmt =
                 $pdo->prepare(
                     '
                     SELECT
                         id,
+                        image_url AS imageUrl,
                         public_id AS publicId,
                         resource_type AS resourceType,
                         category
@@ -3559,6 +3637,13 @@ try {
                     $id,
             ]);
 
+            if (!empty($media['imageUrl'])) {
+                deleteMediaFileByUrl((string) $media['imageUrl']);
+            }
+
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('Expires: 0');
 
             jsonResponse(
                 [

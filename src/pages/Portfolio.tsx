@@ -848,29 +848,32 @@ function Portfolio() {
     let isMounted = true
     const fetchPortfolio = async () => {
       try {
-        const res = await fetch(`${PORTFOLIO_API_URL}/api/portfolio.php`)
+        const res = await fetch(`${PORTFOLIO_API_URL}/api/portfolio.php`, { cache: 'no-store' })
         const data = await readApiJson(res, 'Portfolio')
         if (isMounted && data.success && data.portfolio) {
           const remote = data.portfolio
           
           // Keep the four existing editorial story positions fixed.
-          // Saved Story N updates only Story N; missing positions retain defaults.
+          // Match by story id first so each story stays bound to its stable identity.
           const remoteStories = Array.isArray(remote.stories) ? remote.stories : [];
-          const finalStories = DEFAULT_PORTFOLIO.stories.map((fallback, index) => ({
-            ...fallback,
-            ...(remoteStories[index] || {}),
-            id: fallback.id,
-            title: remoteStories[index]?.title ?? fallback.title,
-            date: remoteStories[index]?.date ?? fallback.date,
-            strapline: remoteStories[index]?.strapline ?? fallback.strapline,
-            paragraphs: Array.isArray(remoteStories[index]?.paragraphs)
-              ? remoteStories[index].paragraphs
-              : fallback.paragraphs,
-            videoUrl: remoteStories[index]?.videoUrl ?? '',
-            images: Array.isArray(remoteStories[index]?.images)
-              ? remoteStories[index].images
-              : [],
-          }));
+          const finalStories = DEFAULT_PORTFOLIO.stories.map((fallback, index) => {
+            const matched = remoteStories.find((s: any) => s?.id === fallback.id) || remoteStories[index] || {};
+            return {
+              ...fallback,
+              ...matched,
+              id: fallback.id,
+              title: matched?.title ?? fallback.title,
+              date: matched?.date ?? fallback.date,
+              strapline: matched?.strapline ?? fallback.strapline,
+              paragraphs: Array.isArray(matched?.paragraphs)
+                ? matched.paragraphs
+                : fallback.paragraphs,
+              videoUrl: matched?.videoUrl ?? '',
+              images: Array.isArray(matched?.images)
+                ? matched.images
+                : [],
+            };
+          });
 
           setPortfolioContent({
             heroEyebrow: remote.heroEyebrow ?? DEFAULT_PORTFOLIO.heroEyebrow,

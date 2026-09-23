@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { uploadToCloudinary } from '../services/cloudinary';
 import type { BlogContent, BlogPost } from '../types';
 import { API_URL, readApiJson } from '../services/api';
-import weddingFilmUrl from '../assets/portfolio/wedding/VIDEOS/KAPIL PAYAL WEDDING FILM HIGH CORRECTION.MP4';
+
 
 // =========================================================
 // SAN PHOTOGRAPHY — BLOG MANAGEMENT
@@ -58,7 +58,7 @@ const DEFAULT_POSTS: AdminBlogPost[] = [
             'From the first look to the final dance, every wedding tells a unique story. We document the in-between moments — the glances, the tears, the laughter — that make your celebration entirely yours.',
         date: '12 August 2026',
         readTime: '5 min watch',
-        videoUrl: weddingFilmUrl,
+        videoUrl: '',
         fallbackVideoUrl: '',
         image: '',
         imageUrl: '',
@@ -380,7 +380,7 @@ function ImageUploader({
             setUploading(true);
             setError('');
             setPreviewError(false);
-            setProgress(5);
+            setProgress(0);
 
             const result = await uploadToCloudinary(
                 file,
@@ -392,14 +392,16 @@ function ImageUploader({
                 throw new Error('No server URL returned.');
             }
 
-            onChange(result.url);
+            // Only set 100% after backend confirms success
             setProgress(100);
+            onChange(result.url);
         } catch (err: unknown) {
             console.error(err);
             setError(err instanceof Error ? err.message : 'Failed to upload image.');
+            setProgress(0);
         } finally {
             setUploading(false);
-            setTimeout(() => setProgress(0), 800);
+            setTimeout(() => setProgress(0), 1200);
         }
     };
 
@@ -407,8 +409,8 @@ function ImageUploader({
         aspect === 'portrait'
             ? 'h-64 sm:h-72'
             : aspect === 'square'
-              ? 'h-52 sm:h-60'
-              : 'h-44 sm:h-52';
+                ? 'h-52 sm:h-60'
+                : 'h-44 sm:h-52';
 
     return (
         <div className="space-y-3">
@@ -503,11 +505,10 @@ function ImageUploader({
                             key={option}
                             type="button"
                             onClick={() => setSource(option)}
-                            className={`rounded-lg px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] transition ${
-                                source === option
+                            className={`rounded-lg px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] transition ${source === option
                                     ? 'bg-black text-white'
                                     : 'text-neutral-500 hover:bg-neutral-100'
-                            }`}
+                                }`}
                         >
                             {option === 'upload' ? 'Upload' : 'URL'}
                         </button>
@@ -599,6 +600,8 @@ function VideoPreview({ value, title }: { value: string; title?: string }) {
         );
     }
 
+    const filename = value.split('/').pop() || 'Video';
+
     return (
         <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-black">
             <video
@@ -610,8 +613,9 @@ function VideoPreview({ value, title }: { value: string; title?: string }) {
                 className="h-52 w-full object-contain"
                 onError={() => setError(true)}
             />
-            <div className="border-t border-white/10 bg-black px-4 py-2 text-[9px] uppercase tracking-[0.18em] text-white/60">
-                {title || 'Video Preview'}
+            <div className="flex items-center justify-between border-t border-white/10 bg-black px-4 py-2 text-[9px] uppercase tracking-[0.18em] text-white/60">
+                <span>{title || 'Video Preview'}</span>
+                <span className="max-w-[50%] truncate font-mono text-white/40">Current: {filename}</span>
             </div>
         </div>
     );
@@ -622,6 +626,7 @@ function VideoUploader({ value, onChange, title }: { value: string; onChange: (v
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
     const [source, setSource] = useState('upload');
     const [urlDraft, setUrlDraft] = useState(value || '');
 
@@ -638,7 +643,8 @@ function VideoUploader({ value, onChange, title }: { value: string; onChange: (v
         try {
             setUploading(true);
             setError('');
-            setProgress(5);
+            setSuccessMessage('');
+            setProgress(0);
 
             const result = await uploadToCloudinary(
                 file,
@@ -650,14 +656,17 @@ function VideoUploader({ value, onChange, title }: { value: string; onChange: (v
                 throw new Error('No server URL returned.');
             }
 
-            onChange(result.url);
+            // Only set 100% after backend confirms the upload is complete
             setProgress(100);
+            onChange(result.url);
+            setSuccessMessage('Video uploaded successfully.');
         } catch (err: unknown) {
             console.error(err);
             setError(err instanceof Error ? err.message : 'Failed to upload video.');
+            setProgress(0);
         } finally {
             setUploading(false);
-            setTimeout(() => setProgress(0), 800);
+            setTimeout(() => setProgress(0), 1200);
         }
     };
 
@@ -698,11 +707,10 @@ function VideoUploader({ value, onChange, title }: { value: string; onChange: (v
                             key={option}
                             type="button"
                             onClick={() => setSource(option)}
-                            className={`rounded-lg px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] transition ${
-                                source === option
+                            className={`rounded-lg px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] transition ${source === option
                                     ? 'bg-black text-white'
                                     : 'text-neutral-500 hover:bg-neutral-100'
-                            }`}
+                                }`}
                         >
                             {option === 'upload' ? 'Upload' : 'URL'}
                         </button>
@@ -772,6 +780,12 @@ function VideoUploader({ value, onChange, title }: { value: string; onChange: (v
                 </div>
             )}
 
+            {successMessage && (
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-xs font-medium text-green-700">
+                    {successMessage}
+                </div>
+            )}
+
             {error && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
                     {error}
@@ -816,6 +830,7 @@ const BlogManagement = () => {
 
             const res = await fetch(`${BLOG_API_URL}/api/blog.php`, {
                 method: 'GET',
+                cache: 'no-store',
                 headers: {
                     Accept: 'application/json',
                 },
@@ -1158,8 +1173,8 @@ const BlogManagement = () => {
         featuredPost?.imageUrl || featuredPost?.image
             ? 'image'
             : featuredPost?.videoUrl
-              ? 'video'
-              : 'image';
+                ? 'video'
+                : 'image';
     const featuredMediaTab =
         mediaTabs.featured || featuredDefaultMediaTab;
 
@@ -1205,17 +1220,16 @@ const BlogManagement = () => {
                                     saving ||
                                     !hasChanges
                                 }
-                                className={`flex-1 rounded-xl px-6 py-3.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-white transition sm:flex-none ${
-                                    saving || !hasChanges
+                                className={`flex-1 rounded-xl px-6 py-3.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-white transition sm:flex-none ${saving || !hasChanges
                                         ? 'cursor-not-allowed bg-neutral-400'
                                         : 'bg-black hover:bg-neutral-800'
-                                }`}
+                                    }`}
                             >
                                 {saving
                                     ? 'Saving...'
                                     : hasChanges
-                                      ? 'Save Changes'
-                                      : 'Saved'}
+                                        ? 'Save Changes'
+                                        : 'Saved'}
                             </button>
                         </div>
                     </div>
@@ -1380,11 +1394,10 @@ const BlogManagement = () => {
                                                     featured: mediaType,
                                                 }))
                                             }
-                                            className={`flex-1 rounded-lg px-3 py-2.5 text-[9px] font-semibold uppercase tracking-[0.18em] transition ${
-                                                featuredMediaTab === mediaType
+                                            className={`flex-1 rounded-lg px-3 py-2.5 text-[9px] font-semibold uppercase tracking-[0.18em] transition ${featuredMediaTab === mediaType
                                                     ? 'bg-black text-white'
                                                     : 'text-neutral-500 hover:bg-neutral-100'
-                                            }`}
+                                                }`}
                                         >
                                             {mediaType}
                                         </button>
@@ -1608,8 +1621,8 @@ const BlogManagement = () => {
                                 post.imageUrl || post.image
                                     ? 'image'
                                     : post.videoUrl
-                                      ? 'video'
-                                      : 'image';
+                                        ? 'video'
+                                        : 'image';
                             const selectedMediaTab =
                                 mediaTabs[mediaKey] || defaultMediaTab;
 
@@ -1663,13 +1676,12 @@ const BlogManagement = () => {
                                             null
                                         );
                                     }}
-                                    className={`cursor-grab rounded-2xl border bg-[#fbfaf7] p-4 shadow-sm transition-all duration-200 active:cursor-grabbing sm:p-6 ${
-                                        isDragging
+                                    className={`cursor-grab rounded-2xl border bg-[#fbfaf7] p-4 shadow-sm transition-all duration-200 active:cursor-grabbing sm:p-6 ${isDragging
                                             ? 'opacity-40 ring-2 ring-black'
                                             : isOver
-                                              ? 'border-black bg-[#f0ede6] ring-2 ring-black'
-                                              : 'border-neutral-200'
-                                    }`}
+                                                ? 'border-black bg-[#f0ede6] ring-2 ring-black'
+                                                : 'border-neutral-200'
+                                        }`}
                                 >
                                     {/* POST HEADER */}
 
@@ -1679,7 +1691,7 @@ const BlogManagement = () => {
                                                 #
                                                 {String(
                                                     index +
-                                                        1
+                                                    1
                                                 ).padStart(
                                                     2,
                                                     '0'
@@ -1694,7 +1706,7 @@ const BlogManagement = () => {
 
                                             <span className="rounded border border-neutral-200 bg-white px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-neutral-500">
                                                 {post.type ===
-                                                'video'
+                                                    'video'
                                                     ? 'VIDEO'
                                                     : 'IMAGE'}
                                             </span>
@@ -1739,11 +1751,10 @@ const BlogManagement = () => {
                                                                     [mediaKey]: mediaType,
                                                                 }))
                                                             }
-                                                            className={`flex-1 rounded-lg px-3 py-2.5 text-[9px] font-semibold uppercase tracking-[0.18em] transition ${
-                                                                selectedMediaTab === mediaType
+                                                            className={`flex-1 rounded-lg px-3 py-2.5 text-[9px] font-semibold uppercase tracking-[0.18em] transition ${selectedMediaTab === mediaType
                                                                     ? 'bg-black text-white'
                                                                     : 'text-neutral-500 hover:bg-neutral-100'
-                                                            }`}
+                                                                }`}
                                                         >
                                                             {mediaType}
                                                         </button>
@@ -1806,7 +1817,7 @@ const BlogManagement = () => {
                                                             index,
                                                             'type',
                                                             value ===
-                                                            'video'
+                                                                'video'
                                                                 ? 'video'
                                                                 : 'image'
                                                         )
@@ -1916,7 +1927,7 @@ const BlogManagement = () => {
                                                     disabled={
                                                         index ===
                                                         posts.length -
-                                                            1
+                                                        1
                                                     }
                                                     className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-40"
                                                 >
@@ -1951,11 +1962,10 @@ const BlogManagement = () => {
                             saving ||
                             !hasChanges
                         }
-                        className={`rounded-xl px-8 py-4 text-[9px] font-semibold uppercase tracking-[0.2em] text-white shadow-2xl transition ${
-                            saving || !hasChanges
+                        className={`rounded-xl px-8 py-4 text-[9px] font-semibold uppercase tracking-[0.2em] text-white shadow-2xl transition ${saving || !hasChanges
                                 ? 'cursor-not-allowed bg-neutral-400'
                                 : 'bg-black hover:bg-neutral-800'
-                        }`}
+                            }`}
                     >
                         {saving
                             ? 'Saving Changes...'

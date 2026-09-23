@@ -205,8 +205,47 @@ export default function Careers() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setSubmitError('');
+
+    let resumeUrl = '';
+
+    if (formData.resume) {
+      setIsSubmitting(true);
+      try {
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', formData.resume);
+
+        const uploadRes = await fetch(`${API_BASE}/api/resume-upload.php`, {
+          method: 'POST',
+          body: uploadFormData,
+        });
+
+        const uploadData = await readApiJson<{
+          success?: boolean;
+          message?: string;
+          url?: string;
+          data?: { url?: string };
+        }>(uploadRes, 'Resume Upload');
+
+        if (!uploadRes.ok || !uploadData?.success) {
+          throw new Error(uploadData?.message || 'Failed to upload resume.');
+        }
+
+        resumeUrl = uploadData?.url || uploadData?.data?.url || '';
+      } catch (err: any) {
+        console.error('Resume upload failed:', err);
+        setSubmitError(err?.message || 'Failed to upload resume. Please try again.');
+        setIsSubmitting(false);
+        return;
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
 
     let message = `Job Application\n\n`;
     message += `Name: ${formData.name}\n`;
@@ -216,7 +255,9 @@ export default function Careers() {
     message += `Designation: ${formData.designation}\n`;
     message += `Portfolio Link: ${formData.portfolioLink}\n`;
     message += `Resume: ${
-      formData.resume
+      resumeUrl
+        ? resumeUrl
+        : formData.resume
         ? formData.resume.name
         : "No file attached"
     }`;
@@ -482,19 +523,30 @@ export default function Careers() {
             />
           </div>
 
+          {submitError && (
+            <p className="text-center text-[11px] text-red-600 tracking-wider">
+              {submitError}
+            </p>
+          )}
+
           {/* APPLY */}
 
           <div className="pt-4 text-center">
 
             <button
               type="submit"
-              className="group inline-flex items-center justify-center bg-[#181715] px-10 py-3 text-[9px] uppercase tracking-[0.3em] text-white transition-all duration-300 hover:bg-[#9b7740]"
+              disabled={isSubmitting}
+              className={`group inline-flex items-center justify-center bg-[#181715] px-10 py-3 text-[9px] uppercase tracking-[0.3em] text-white transition-all duration-300 hover:bg-[#9b7740] ${
+                isSubmitting ? "opacity-60 cursor-not-allowed" : ""
+              }`}
             >
-              {career.applyButtonText}
+              {isSubmitting ? "Uploading Resume..." : career.applyButtonText}
 
-              <span className="ml-3 text-xs transition-transform duration-300 group-hover:translate-x-1">
-                →
-              </span>
+              {!isSubmitting && (
+                <span className="ml-3 text-xs transition-transform duration-300 group-hover:translate-x-1">
+                  →
+                </span>
+              )}
             </button>
 
           </div>

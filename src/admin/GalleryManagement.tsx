@@ -73,7 +73,7 @@ const API_BASE_URL = API_URL;
 const MAX_CARDS = 16;
 const MAX_COUPLES_CARDS = 12;
 const MAX_RECENT_CARDS = 4;
-const MAX_PHOTOS = 40;
+const MAX_PHOTOS = 50;
 
 const DEFAULT_COUPLES: GalleryAdminAlbum[] = [
   {
@@ -1415,6 +1415,79 @@ export default function GalleryManagement() {
     };
 
   /* =========================================================
+     DELETE ALL PHOTOS
+  ========================================================= */
+
+  const handleDeleteAllAlbumPhotos =
+    async (
+      section: GallerySection,
+      slug: string
+    ) => {
+      const confirmed =
+        window.confirm(
+          "Delete all photos from this story?"
+        );
+
+      if (!confirmed) return;
+
+      try {
+        setErrMsg("");
+
+        const isRecent =
+          section === "recentAlbums";
+        const category =
+          isRecent ? `recent:${slug}` : `gallery:${slug}`;
+
+        const response =
+          await fetch(
+            `${API_BASE_URL}/api/gallery.php?action=delete_all&slug=${encodeURIComponent(
+              slug
+            )}&category=${encodeURIComponent(
+              category
+            )}&section=${encodeURIComponent(section)}`,
+            {
+              method: "DELETE",
+              headers:
+                authenticatedHeaders(),
+            }
+          );
+
+        const data =
+          await parseApiResponse(
+            response
+          );
+
+        if (
+          !response.ok ||
+          !data.success
+        ) {
+          throw new Error(
+            data.message ||
+              "Failed to delete all photos."
+          );
+        }
+
+        await fetchAlbumPhotos(
+          slug,
+          section
+        );
+
+        setSaveMsg(
+          "All photos deleted successfully."
+        );
+      } catch (error: unknown) {
+        console.error(
+          "Delete all photos error:",
+          error
+        );
+
+        setErrMsg(
+          error instanceof Error ? error.message : "Failed to delete all photos."
+        );
+      }
+    };
+
+  /* =========================================================
      MOVE PHOTO
   ========================================================= */
 
@@ -2122,52 +2195,65 @@ export default function GalleryManagement() {
             </p>
           </div>
 
-          <label
-            className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-medium uppercase tracking-[0.15em] shadow-sm ${
-              remaining <= 0
-                ? "bg-neutral-300 text-neutral-500 cursor-not-allowed"
-                : isUploading
-                ? "bg-neutral-400 text-white cursor-wait"
-                : "bg-[#9b7740] hover:bg-[#856535] text-white cursor-pointer"
-            }`}
-          >
-            {isUploading ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Upload className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2">
+            {photoCount > 0 && (
+              <button
+                type="button"
+                onClick={() => handleDeleteAllAlbumPhotos(section, slug)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-medium uppercase tracking-[0.15em] border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete All Photos</span>
+              </button>
             )}
 
-            <span>
-              {isUploading
-                ? "Uploading..."
-                : remaining <= 0
-                ? "Album Full"
-                : "Add Photos"}
-            </span>
-
-            {remaining > 0 &&
-              !isUploading && (
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  className="hidden"
-                  disabled={
-                    isUploading
-                  }
-                  onChange={(e) => {
-                    handleUploadAlbumPhotos(
-                      section,
-                      slug,
-                      e.target.files
-                    );
-
-                    e.target.value =
-                      "";
-                  }}
-                />
+            <label
+              className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-medium uppercase tracking-[0.15em] shadow-sm ${
+                remaining <= 0
+                  ? "bg-neutral-300 text-neutral-500 cursor-not-allowed"
+                  : isUploading
+                  ? "bg-neutral-400 text-white cursor-wait"
+                  : "bg-[#9b7740] hover:bg-[#856535] text-white cursor-pointer"
+              }`}
+            >
+              {isUploading ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Upload className="w-3.5 h-3.5" />
               )}
-          </label>
+
+              <span>
+                {isUploading
+                  ? "Uploading..."
+                  : remaining <= 0
+                  ? "Album Full"
+                  : "Add Photos"}
+              </span>
+
+              {remaining > 0 &&
+                !isUploading && (
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    disabled={
+                      isUploading
+                    }
+                    onChange={(e) => {
+                      handleUploadAlbumPhotos(
+                        section,
+                        slug,
+                        e.target.files
+                      );
+
+                      e.target.value =
+                        "";
+                    }}
+                  />
+                )}
+            </label>
+          </div>
         </div>
 
         {/* ---------------------------------------------------
@@ -2223,7 +2309,7 @@ export default function GalleryManagement() {
             </p>
 
             <p className="text-[11px] text-neutral-400 mt-1">
-              Upload photos in multiple batches until you reach 40.
+              Upload photos in multiple batches until you reach {MAX_PHOTOS}.
             </p>
 
           </div>
@@ -3499,7 +3585,7 @@ function AddAlbumForm({
           </h3>
 
           <p className="text-[11px] text-neutral-400 mt-1">
-            Cover image is optional and is separate from the 40-photo album limit.
+            Cover image is optional and is separate from the {MAX_PHOTOS}-photo album limit.
           </p>
 
         </div>

@@ -21,9 +21,9 @@ const API_BASE_URL = API_URL;
    ASSETS LOOKUP FOR INITIAL VALUES MATCHING HOME.JSX
 ========================================================= */
 
-import hero1 from '../assets/hero/img1.jpg';
-import hero2 from '../assets/hero/img2.jpg';
-import hero3 from '../assets/hero/img3.jpg';
+
+
+
 
 const portfolioFiles = import.meta.glob(
   '../assets/portfolio/wedding/**/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
@@ -70,9 +70,9 @@ const kapilPayal01 =
 const pratikMegha01 = findPortfolioImage('PRATIK & MEGHA', 'DSC00039');
 const tanmayAchal01 = findPortfolioImage('Tanmay&Achal', '01');
 
-const image01 = kapilPayal01 || hero1;
-const image04 = pratikMegha01 || hero1;
-const image07 = tanmayAchal01 || hero1;
+const image01 = kapilPayal01 || '';
+const image04 = pratikMegha01 || '';
+const image07 = tanmayAchal01 || '';
 
 const defaultSoulCinemaVideo =
   findVideoByName(videoFiles2, 'KAPIL PAYAL WEDDING FILM HIGH CORRECTION') ||
@@ -144,9 +144,9 @@ type CouplePhotoRecord = Array<{
 }>;
 
 const defaultHeroSlides: HomeSlide[] = [
-  { id: 'hero-1', title: 'Slide 01', image: hero1 },
-  { id: 'hero-2', title: 'Slide 02', image: hero2 },
-  { id: 'hero-3', title: 'Slide 03', image: hero3 },
+  { id: 'hero-1', title: 'Slide 01', image: '' },
+  { id: 'hero-2', title: 'Slide 02', image: '' },
+  { id: 'hero-3', title: 'Slide 03', image: '' },
 ];
 
 /* =========================================================
@@ -539,6 +539,7 @@ function VideoUploader({
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const upload = async (file?: File) => {
     if (!file || !file.type.startsWith('video/')) {
@@ -549,6 +550,7 @@ function VideoUploader({
     try {
       setUploading(true);
       setError('');
+      setSuccessMessage('');
       setProgress(0);
 
       // IMPORTANT:
@@ -567,6 +569,7 @@ function VideoUploader({
 
       onChange(result.url);
       setProgress(100);
+      setSuccessMessage('Video uploaded successfully.');
     } catch (err: unknown) {
       console.error('Home video upload error:', err);
       setError(err instanceof Error ? err.message : 'Failed to upload video.');
@@ -586,11 +589,16 @@ function VideoUploader({
 
       <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
         {value ? (
-          <video
-            src={value}
-            controls
-            className="h-full w-full object-cover"
-          />
+          <>
+            <video
+              src={value}
+              controls
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute left-2.5 top-2.5 max-w-[70%] truncate rounded bg-black/75 px-2 py-1 text-[8px] font-semibold uppercase tracking-wider text-white">
+              Current Video: {value.split('/').pop() || 'Active video'}
+            </div>
+          </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center p-3 text-center text-neutral-400">
             <svg
@@ -656,6 +664,10 @@ function VideoUploader({
           }}
         />
       </div>
+
+      {successMessage && (
+        <p className="text-[11px] font-medium text-green-600">{successMessage}</p>
+      )}
 
       <input
         type="text"
@@ -1385,6 +1397,26 @@ const HomePageManagement = () => {
     }
   };
 
+  const removeAllCouplePhotos = async (slug: string) => {
+    if (!window.confirm('Delete all photos from this story?')) return;
+    try {
+      setErrMsg('');
+      const response = await fetch(
+        `${buildApiUrl(API_BASE_URL, 'api/gallery.php')}?action=delete_all&slug=${encodeURIComponent(slug)}&category=${encodeURIComponent(`gallery:${slug}`)}`,
+        {
+          method: 'DELETE',
+          headers: galleryHeaders(),
+        }
+      );
+      const data = await readApiJson(response, 'Gallery media');
+      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to delete photos.');
+      await fetchCouplePhotos(slug);
+      setSaveMsg('All photos deleted successfully.');
+    } catch (error: unknown) {
+      setErrMsg(getErrorMessage(error, 'Failed to delete all photos.'));
+    }
+  };
+
   const moveCouplePhoto = async (slug: string, index: number, direction: number) => {
     const photos = [...(couplePhotos[slug] || [])];
     const target = index + direction;
@@ -1670,14 +1702,25 @@ const HomePageManagement = () => {
               {Math.max(0, MAX_COUPLE_PHOTOS - photos.length)} remaining
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setBulkOpen((prev) => ({ ...prev, [slug]: !prev[slug] }))}
-            className="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-100"
-          >
-            {bulkOpen[slug] ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            Bulk Upload Photos
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBulkOpen((prev) => ({ ...prev, [slug]: !prev[slug] }))}
+              className="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-100"
+            >
+              {bulkOpen[slug] ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              Bulk Upload Photos
+            </button>
+            <button
+              type="button"
+              onClick={() => removeAllCouplePhotos(slug)}
+              disabled={photos.length === 0}
+              className="flex items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 size={13} />
+              Delete All Photos
+            </button>
+          </div>
         </div>
 
         {bulkOpen[slug] && (
@@ -1768,17 +1811,19 @@ const HomePageManagement = () => {
                   <div className="aspect-square bg-neutral-100">
                     <img src={photo.imageUrl} alt={photo.title || `Photo ${slotIndex + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 border-t border-neutral-100 p-1.5">
-                    <label title="Replace photo" className="flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-lg border border-neutral-200 bg-white px-1 text-[9px] font-semibold uppercase tracking-wider text-neutral-600 transition hover:bg-neutral-100 active:scale-95">
-                      <Upload size={11} /> Replace
+                  <div className="grid grid-cols-2 gap-1 border-t border-neutral-100 p-1">
+                    <label title="Replace photo" className="flex min-h-7 cursor-pointer items-center justify-center gap-0.5 rounded-md border border-neutral-200 bg-white px-1 text-[8.5px] font-semibold uppercase text-neutral-600 transition hover:bg-neutral-100 active:scale-95 whitespace-nowrap">
+                      <Upload size={10} className="shrink-0" />
+                      <span>Replace</span>
                       <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => { replaceCouplePhoto(slug, photo, event.target.files?.[0]); event.target.value = ''; }} />
                     </label>
-                    <button type="button" title="Delete photo" onClick={() => removeCouplePhoto(slug, photo.id)} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-red-200 bg-white px-1 text-[9px] font-semibold uppercase tracking-wider text-red-600 transition hover:bg-red-50 active:scale-95">
-                      <Trash2 size={11} /> Delete
+                    <button type="button" title="Delete photo" onClick={() => removeCouplePhoto(slug, photo.id)} className="flex min-h-7 items-center justify-center gap-0.5 rounded-md border border-red-200 bg-white px-1 text-[8.5px] font-semibold uppercase text-red-600 transition hover:bg-red-50 active:scale-95 whitespace-nowrap">
+                      <Trash2 size={10} className="shrink-0" />
+                      <span>Delete</span>
                     </button>
-                    <button type="button" title={photo.isActive ? 'Hide photo' : 'Show photo'} onClick={() => toggleCouplePhoto(slug, photo)} className="col-span-2 flex min-h-9 items-center justify-center gap-1 rounded-lg border border-neutral-200 bg-white px-1 text-[9px] font-semibold uppercase tracking-wider text-neutral-600 transition hover:bg-neutral-100 active:scale-95">
-                      {photo.isActive ? <Eye size={11} /> : <EyeOff size={11} />}
-                      {photo.isActive ? 'Hide' : 'Show'}
+                    <button type="button" title={photo.isActive ? 'Hide photo' : 'Show photo'} onClick={() => toggleCouplePhoto(slug, photo)} className="col-span-2 flex min-h-7 items-center justify-center gap-1 rounded-md border border-neutral-200 bg-white px-1 text-[8.5px] font-semibold uppercase text-neutral-600 transition hover:bg-neutral-100 active:scale-95 whitespace-nowrap">
+                      {photo.isActive ? <Eye size={10} className="shrink-0" /> : <EyeOff size={10} className="shrink-0" />}
+                      <span>{photo.isActive ? 'Hide' : 'Show'}</span>
                     </button>
                   </div>
                   <div className="flex items-center justify-center gap-1 border-t border-neutral-100 px-1.5 py-1">

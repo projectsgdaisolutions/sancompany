@@ -10,6 +10,10 @@ import {
   X,
 } from "lucide-react";
 import { API_URL, readApiJson } from "../services/api";
+import {
+  FILM_CATEGORY_DEFINITIONS,
+  normalizeFilmCategory,
+} from "../types";
 
 interface FilmItem {
   id?: string | number;
@@ -57,12 +61,6 @@ const DEFAULT_FILMS: FilmsContent = {
     "Every love story deserves to be felt again.",
   statementText:
     "We craft cinematic wedding films with a focus on emotion, atmosphere and authentic moments.",
-};
-
-const FILM_CATEGORY_LIMITS = {
-  "Recent Cinema": 4,
-  "Wedding Films": 8,
-  "Cinematic Stories": 4,
 };
 
 /* =========================================================
@@ -145,7 +143,7 @@ function HeroVideo({
 
     videoRef.current
       .play()
-      .catch(() => {});
+      .catch(() => { });
   }, [videoUrl]);
 
   if (!videoUrl) {
@@ -163,7 +161,7 @@ function HeroVideo({
           muted
           loop
           playsInline
-          preload="auto"
+          preload="metadata"
           className="absolute inset-0 h-full w-full object-cover transition-all duration-700 grayscale group-hover:grayscale-0"
         />
 
@@ -301,6 +299,7 @@ function VideoModal({
               src={film.videoUrl}
               controls
               autoPlay
+              preload="metadata"
               className="h-full w-full object-contain"
             />
           )}
@@ -328,10 +327,10 @@ function FilmCard({
   const videoRef =
     useRef<HTMLVideoElement | null>(null);
 
-  const [
-    isPlaying,
-    setIsPlaying,
-  ] = useState(false);
+  // isActivated = user has clicked at least once (controls become visible, unmuted)
+  // isPlaying = actual video play state, synced via native events
+  const [isActivated, setIsActivated] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     const video =
@@ -361,13 +360,33 @@ function FilmCard({
       );
     }
 
+    // Sync isPlaying with native video events
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => setIsPlaying(false);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
+
     return () => {
       video.removeEventListener(
         "loadedmetadata",
         setStillFrame
       );
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
     };
   }, [film.videoUrl]);
+
+  // When activated, imperatively enable controls and unmute
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isActivated) return;
+    video.controls = true;
+    video.loop = false;
+    video.muted = false;
+  }, [isActivated]);
 
   const handleCardClick = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
@@ -375,19 +394,30 @@ function FilmCard({
     const video =
       videoRef.current;
 
-    if (
-      video &&
-      !isPlaying &&
-      film.videoUrl
-    ) {
+    if (!video || !film.videoUrl) return;
+
+    if (!isActivated) {
+      // First click: activate — unmute, show controls, play from start
+      setIsActivated(true);
       video.muted = false;
+      video.controls = true;
+      video.loop = false;
       video.currentTime = 0;
+      video.play().catch(() => { });
+    } else {
+      // Already activated: toggle play/pause
+      if (video.paused) {
+        video.play().catch(() => { });
+      } else {
+        video.pause();
+      }
+    }
+  };
 
-      video
-        .play()
-        .catch(() => {});
-
-      setIsPlaying(true);
+  // Prevent native controls clicks from bubbling to the parent div (double-toggle fix)
+  const handleVideoClick = (e: React.MouseEvent<HTMLVideoElement>) => {
+    if (isActivated) {
+      e.stopPropagation();
     }
   };
 
@@ -430,11 +460,11 @@ function FilmCard({
           <video
             ref={videoRef}
             src={film.videoUrl}
-            muted={!isPlaying}
-            loop={!isPlaying}
+            muted
+            loop
             playsInline
-            preload="metadata"
-            controls={isPlaying}
+            preload={index < 4 ? "metadata" : "none"}
+            onClick={handleVideoClick}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
           />
         ) : (
@@ -443,7 +473,7 @@ function FilmCard({
           </div>
         )}
 
-        {!isPlaying &&
+        {!isActivated &&
           film.videoUrl && (
             <button
               onClick={
@@ -539,6 +569,7 @@ function Films() {
             {
               signal:
                 controller.signal,
+              cache: 'no-store',
             }
           );
 
@@ -555,7 +586,7 @@ function Films() {
         if (
           savedFilms &&
           typeof savedFilms ===
-            "object"
+          "object"
         ) {
           setContent({
             ...DEFAULT_FILMS,
@@ -598,9 +629,7 @@ function Films() {
 
   const filters: FilmCategory[] = [
     "All",
-    "Recent Cinema",
-    "Wedding Films",
-    "Cinematic Stories",
+    ...FILM_CATEGORY_DEFINITIONS.map((category) => category.label),
   ];
 
   /* =======================================================
@@ -620,23 +649,13 @@ function Films() {
         (film) => film.isActive !== false
       );
 
-      if (
-        activeFilter === "All"
-      ) {
-        return [
-          ...visibleItems.filter((film) => film.category === "Recent Cinema").slice(0, FILM_CATEGORY_LIMITS["Recent Cinema"]),
-          ...visibleItems.filter((film) => film.category === "Wedding Films").slice(0, FILM_CATEGORY_LIMITS["Wedding Films"]),
-          ...visibleItems.filter((film) => film.category === "Cinematic Stories").slice(0, FILM_CATEGORY_LIMITS["Cinematic Stories"]),
-        ];
+      if (activeFilter === "All") {
+        return visibleItems;
       }
 
-      return visibleItems
-        .filter(
-        (film) =>
-          film.category ===
-          activeFilter
-        )
-        .slice(0, FILM_CATEGORY_LIMITS[activeFilter] || 0);
+      return visibleItems.filter(
+        (film) => normalizeFilmCategory(film.category) === normalizeFilmCategory(activeFilter)
+      );
     }, [
       content.items,
       activeFilter,
@@ -703,8 +722,8 @@ function Films() {
                   >
                     {index >
                       0 && (
-                      <span className="mx-4 hidden h-4 w-px bg-[#171717]/25 sm:block" />
-                    )}
+                        <span className="mx-4 hidden h-4 w-px bg-[#171717]/25 sm:block" />
+                      )}
 
                     <button
                       type="button"
@@ -713,12 +732,11 @@ function Films() {
                           filter
                         )
                       }
-                      className={`text-[9px] tracking-[0.08em] transition-colors duration-300 ${
-                        activeFilter ===
-                        filter
+                      className={`text-[9px] tracking-[0.08em] transition-colors duration-300 ${activeFilter ===
+                          filter
                           ? "text-[#171717]"
                           : "text-[#171717]/45 hover:text-[#171717]"
-                      }`}
+                        }`}
                       style={{
                         fontFamily:
                           FONT_BODY,
@@ -734,7 +752,7 @@ function Films() {
             </div>
 
             {filteredFilms.length >
-            0 ? (
+              0 ? (
               // Updated Grid: 2 cols on mobile, 2 on tablet/small desktop, 3 on large, 4 on extra large
               <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-2 md:grid-cols-3 sm:gap-x-6 sm:gap-y-10 xl:grid-cols-4 lg:gap-x-8 lg:gap-y-12">
                 {filteredFilms.map(

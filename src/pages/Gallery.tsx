@@ -402,7 +402,8 @@ function AlbumCard({ album, index }: AlbumCardProps) {
             <img
               src={album.image}
               alt={album.name}
-              loading="lazy"
+              loading={index < 3 ? 'eager' : 'lazy'}
+              fetchPriority={index < 3 ? 'high' : 'auto'}
               decoding="async"
               className="absolute inset-0 h-full w-full object-cover transition-all duration-[1200ms] ease-out grayscale-[15%] group-hover:scale-[1.04] group-hover:grayscale-0"
             />
@@ -465,7 +466,7 @@ function Gallery() {
     // Fetch Gallery metadata (couples + recentAlbums) from PHP API
     const fetchGalleryContent = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/content.php`);
+        const response = await fetch(`${API_BASE_URL}/api/content.php`, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Content request failed: ${response.status}`);
         }

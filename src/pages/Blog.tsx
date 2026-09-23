@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 
 // 1st Hero Video Import
-import weddingFilmUrl from '../assets/portfolio/wedding/VIDEOS/KAPIL PAYAL WEDDING FILM HIGH CORRECTION.MP4'
+
 
 const BLOG_API_URL = API_URL
 
@@ -49,7 +49,7 @@ const DEFAULT_POSTS: BlogPost[] = [
       'From the first look to the final dance, every wedding tells a unique story. We document the in-between moments — the glances, the tears, the laughter — that make your celebration entirely yours.',
     date: '12 August 2026',
     readTime: '5 min watch',
-    videoUrl: weddingFilmUrl,
+    videoUrl: '',
     image: '',
     imageUrl: '',
   },
@@ -95,7 +95,7 @@ const DEFAULT_POSTS: BlogPost[] = [
       'A great wedding film is more than just a recording; it is a carefully crafted narrative.',
     date: '01 July 2026',
     readTime: '5 min watch',
-    videoUrl: localVideos[0] || weddingFilmUrl,
+    videoUrl: localVideos[0] || '',
     image: '',
     imageUrl: '',
   },
@@ -141,7 +141,7 @@ const DEFAULT_POSTS: BlogPost[] = [
       'Beyond beautiful images, here are the things that truly matter when choosing someone to document your day.',
     date: '05 August 2026',
     readTime: '4 min watch',
-    videoUrl: localVideos[1] || weddingFilmUrl,
+    videoUrl: localVideos[1] || '',
     image: '',
     imageUrl: '',
   },
@@ -446,7 +446,9 @@ function BlogCard({
               post.image
             }
             alt={post.title}
-            loading="lazy"
+            loading={index < 3 ? 'eager' : 'lazy'}
+            fetchPriority={index < 3 ? 'high' : 'auto'}
+            decoding="async"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-[1200ms] ease-out group-hover:scale-105"
           />
         ) : (

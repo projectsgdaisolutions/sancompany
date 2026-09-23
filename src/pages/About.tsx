@@ -250,7 +250,7 @@ function About() {
     let isMounted = true
     const loadContent = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/about.php`)
+        const res = await fetch(`${API_BASE_URL}/api/about.php`, { cache: 'no-store' })
         const data = await readApiJson(res, 'About')
         if (isMounted && data?.success && data?.content?.about) {
           const remote = data.content.about

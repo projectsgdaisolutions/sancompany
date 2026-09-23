@@ -269,7 +269,6 @@ export async function uploadToCloudinary(
                         uploadFile.type,
                         uploadFile.size,
                         uploadedBefore,
-                        uploadFile.size,
                         onProgress,
                         highestProgress
                     );

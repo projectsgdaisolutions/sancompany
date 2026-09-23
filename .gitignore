@@ -42,3 +42,9 @@ backend/php/tools/configure_admin_credentials.php
 # Deployment / generated files
 serverbyt-deployment-*/
 serverbyt-dist/
+
+# Runtime uploaded media - never commit
+public/uploads/
+
+# PHP runtime/upload temporary files
+public/uploads/**

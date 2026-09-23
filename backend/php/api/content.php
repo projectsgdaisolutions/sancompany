@@ -619,7 +619,7 @@ function normalizeFilm(array $film, int $index): array
 
     $category = trim(
         (string) (
-            $film['category'] ?? 'Recent Cinema'
+            $film['category'] ?? ''
         )
     );
 
@@ -645,7 +645,7 @@ function normalizeFilm(array $film, int $index): array
         ? true
         : (bool) $film['isActive'];
 
-    return [
+    return array_merge($film, [
         'id' => $id,
         'videoUrl' => $videoUrl,
         'title' => $title,
@@ -654,8 +654,38 @@ function normalizeFilm(array $film, int $index): array
         'description' => $description,
         'date' => $date,
         'isActive' => $isActive,
-        'order' => $index,
-    ];
+        'order' => isset($film['order']) ? (int) $film['order'] : $index,
+    ]);
+}
+
+function normalizeFilmCategory($category): ?string
+{
+    if (!is_string($category)) {
+        return null;
+    }
+
+    $category = str_replace("\xC2\xA0", ' ', $category);
+    $category = preg_replace('/\s+/u', ' ', trim($category)) ?? trim($category);
+
+    if (in_array($category, ALLOWED_FILM_CATEGORIES, true)) {
+        return $category;
+    }
+
+    $normalized = strtolower($category);
+    $normalized = preg_replace('/[^a-z0-9]+/', '-', $normalized) ?? '';
+    $normalized = trim($normalized, '-');
+
+    foreach (ALLOWED_FILM_CATEGORIES as $allowedCategory) {
+        $allowedId = strtolower((string) preg_replace('/[^a-z0-9]+/', '-', $allowedCategory));
+        if ($normalized === $allowedId) {
+            $category = $allowedCategory;
+            break;
+        }
+    }
+
+    return in_array($category, ALLOWED_FILM_CATEGORIES, true)
+        ? $category
+        : null;
 }
 
 function isPopulatedFilm(array $film): bool
@@ -672,8 +702,12 @@ function validateFilmCategoryLimits(array $items): void
             continue;
         }
 
-        $category = $film['category'] ?? '';
-        if (array_key_exists($category, $counts)) {
+        $category = normalizeFilmCategory(
+            isset($film['category']) && is_string($film['category'])
+                ? $film['category']
+                : null
+        );
+        if ($category !== null && array_key_exists($category, $counts)) {
             $counts[$category]++;
         }
     }
@@ -693,7 +727,7 @@ function validateFilmCategoryLimits(array $items): void
  *
  * Total maximum = 16, distributed across the three film categories.
  */
-function normalizeAndValidateFilms(array $films): array
+function normalizeAndValidateFilms(array $films, bool $rejectInvalidCategories = true): array
 {
     $items =
         isset($films['items']) &&
@@ -730,20 +764,20 @@ function normalizeAndValidateFilms(array $films): array
             $index
         );
 
-        if (
-            isPopulatedFilm($normalizedFilm) &&
-            !in_array(
-                $normalizedFilm['category'],
-                ALLOWED_FILM_CATEGORIES,
-                true
-            )
-        ) {
+        $category = normalizeFilmCategory($normalizedFilm['category']);
+        if (isPopulatedFilm($normalizedFilm) && (!is_string($category) || !in_array($category, ALLOWED_FILM_CATEGORIES, true)) && $rejectInvalidCategories) {
             errorResponse(
                 'Invalid film category for "' .
                 ($normalizedFilm['title'] ?: 'Untitled Film') .
+                '". Received: "' .
+                (is_scalar($normalizedFilm['category']) ? (string) $normalizedFilm['category'] : gettype($normalizedFilm['category'])) .
                 '". Allowed categories: Recent Cinema, Wedding Films, Cinematic Stories.',
                 400
             );
+        }
+
+        if ($category !== null) {
+            $normalizedFilm['category'] = $category;
         }
 
         $normalizedItems[] = $normalizedFilm;
@@ -798,7 +832,8 @@ function getFilmsContent(PDO $pdo): array
         is_array($gallery['films'])
     ) {
         return normalizeAndValidateFilms(
-            $gallery['films']
+            $gallery['films'],
+            false
         );
     }
 

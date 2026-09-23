@@ -6,6 +6,7 @@ import type { GalleryCouple, GalleryPhoto } from "../types";
 import { API_URL, readApiJson } from "../services/api";
 
 const API_BASE_URL = API_URL;
+const MAX_ALBUM_PHOTOS = 50;
 
 /* =========================================================
    FALLBACK COUPLES
@@ -81,7 +82,8 @@ export default function AlbumDetail() {
 
         try {
           const photosRes = await fetch(
-            `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(slug || "")}`
+            `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(slug || "")}`,
+            { cache: 'no-store' }
           );
           if (photosRes.ok) {
             const photosData = await readApiJson(photosRes, 'Gallery photos');
@@ -90,9 +92,9 @@ export default function AlbumDetail() {
                 matchedCouple = photosData.album;
               }
               if (Array.isArray(photosData.photos)) {
-                // Maximum 40 photos for this album
+                // Maximum 50 photos for this album
                 albumPhotosList = photosData.photos
-                  .slice(0, 40)
+                  .slice(0, MAX_ALBUM_PHOTOS)
                   .map((p: GalleryPhoto) => p.imageUrl || p.image_url || p.url)
                   .filter(Boolean);
               }
@@ -105,7 +107,7 @@ export default function AlbumDetail() {
         // 2. Fallback to website_content if album metadata wasn't populated
         if (!matchedCouple) {
           try {
-            const contentRes = await fetch(`${API_BASE_URL}/api/content.php`);
+            const contentRes = await fetch(`${API_BASE_URL}/api/content.php`, { cache: 'no-store' });
             if (contentRes.ok) {
               const contentData = await readApiJson(contentRes, 'Gallery content');
               const savedCouples = contentData.content?.gallery?.couples;
@@ -347,7 +349,7 @@ export default function AlbumDetail() {
             </p>
             {images.length > 0 && (
               <span className="text-[10px] uppercase tracking-[0.25em] text-neutral-400">
-                {images.length} / 40 photos
+                {images.length} / {MAX_ALBUM_PHOTOS} photos
               </span>
             )}
           </div>
@@ -395,7 +397,8 @@ export default function AlbumDetail() {
                     src={src}
                     alt={`${couple.name} - Moment ${index + 1}`}
                     className="w-full h-auto block object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                    loading="lazy"
+                    loading={index < 4 ? 'eager' : 'lazy'}
+                    fetchPriority={index < 4 ? 'high' : 'auto'}
                     decoding="async"
                   />
                 </motion.div>

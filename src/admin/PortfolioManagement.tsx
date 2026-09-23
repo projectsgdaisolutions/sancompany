@@ -191,15 +191,17 @@ const normalizePortfolio = (saved: unknown): PortfolioContent => {
 
     /*
      * Keep the same four editorial story positions used by the
-     * current public Portfolio. Existing saved stories are used;
-     * missing positions retain the original content.
+     * current public Portfolio. Match stories by stable id first
+     * to prevent index mismatches, then fall back to position.
      */
     const stories = DEFAULT_STORIES.map(
-        (fallback, index) =>
-            normalizeStory(
-                sourceStories[index] || fallback,
-                index
-            )
+        (fallback, index) => {
+            const matched =
+                sourceStories.find((s) => s?.id === fallback.id) ||
+                sourceStories[index] ||
+                fallback
+            return normalizeStory(matched, index)
+        }
     )
 
     return {
@@ -362,6 +364,8 @@ function VideoUploader({
         useState(0)
     const [error, setError] =
         useState('')
+    const [successMessage, setSuccessMessage] =
+        useState('')
 
     const previewSrc =
         value || fallbackSrc
@@ -380,6 +384,7 @@ function VideoUploader({
         try {
             setUploading(true)
             setError('')
+            setSuccessMessage('')
             setProgress(1)
 
             const result =
@@ -398,6 +403,7 @@ function VideoUploader({
 
             onChange(result.url)
             setProgress(100)
+            setSuccessMessage('Video uploaded successfully.')
         } catch (err) {
             console.error(
                 'Portfolio video upload error:',
@@ -439,11 +445,11 @@ function VideoUploader({
                     </div>
                 )}
 
-                <div className="absolute left-3 top-3 rounded-lg bg-black/75 px-3 py-2 text-[8px] font-semibold uppercase tracking-[0.18em] text-white">
+                <div className="absolute left-3 top-3 max-w-[70%] truncate rounded-lg bg-black/75 px-3 py-2 text-[8px] font-semibold uppercase tracking-[0.18em] text-white">
                     {value
-                        ? 'Uploaded video'
+                        ? `Current Video: ${value.split('/').pop() || 'Uploaded video'}`
                         : fallbackSrc
-                            ? 'Current local video'
+                            ? `Current Video: ${fallbackSrc.split('/').pop() || 'Local asset'}`
                             : 'No video'}
                 </div>
 
@@ -524,6 +530,12 @@ function VideoUploader({
                 </p>
             )}
 
+            {successMessage && (
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-xs font-medium text-green-700">
+                    {successMessage}
+                </div>
+            )}
+
             <Field
                 label="Video URL"
                 value={value}
@@ -584,10 +596,11 @@ function StoryImageManager({
                     }
                 })
                 .filter((image) => image.url)
+                .slice(0, MAX_STORY_IMAGES)
             : []
 
     const remaining =
-        MAX_STORY_IMAGES - images.length
+        Math.max(0, MAX_STORY_IMAGES - images.length)
 
     const [showImages, setShowImages] =
         useState(false)
@@ -770,6 +783,12 @@ function StoryImageManager({
         )
     }
 
+    const removeAllImages = () => {
+        if (!images.length) return
+        if (!window.confirm(`Delete all ${images.length} photo${images.length === 1 ? '' : 's'} from this story? This cannot be undone.`)) return
+        setImages([])
+    }
+
     const toggleVisibility = (index: number) => {
         const next = images.map(
             (image, i) =>
@@ -875,21 +894,39 @@ function StoryImageManager({
                     </p>
                 </div>
 
-                <button
-                    type="button"
-                    disabled={
-                        uploading ||
-                        remaining <= 0
-                    }
-                    onClick={() =>
-                        inputRef.current?.click()
-                    }
-                    className="w-full rounded-xl bg-black px-5 py-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400 sm:w-auto"
-                >
-                    {remaining > 0
-                        ? `+ Add Images (${remaining} left)`
-                        : '30 Images Added'}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    {images.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={removeAllImages}
+                            className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-red-600 transition hover:bg-red-100"
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                            </svg>
+                            Delete All Photos
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        disabled={
+                            uploading ||
+                            remaining <= 0
+                        }
+                        onClick={() =>
+                            inputRef.current?.click()
+                        }
+                        className="w-full rounded-xl bg-black px-5 py-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400 sm:w-auto"
+                    >
+                        {remaining > 0
+                            ? `+ Add Images (${remaining} left)`
+                            : '30 Images Added'}
+                    </button>
+                </div>
             </div>
 
             {uploading && (
@@ -2009,23 +2046,15 @@ const PortfolioManagement = () => {
                                         <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                                             <div className="flex min-w-0 items-center gap-3">
                                                 <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-white text-[9px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
-                                                    {story.coverImageUrl ? (
-                                                        <img
-                                                            src={story.coverImageUrl}
-                                                            alt={story.title}
-                                                            className="h-full w-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <span>
-                                                            {String(
-                                                                storyIndex +
-                                                                1
-                                                            ).padStart(
-                                                                2,
-                                                                '0'
-                                                            )}
-                                                        </span>
-                                                    )}
+                                                    <span>
+                                                        {String(
+                                                            storyIndex +
+                                                            1
+                                                        ).padStart(
+                                                            2,
+                                                            '0'
+                                                        )}
+                                                    </span>
                                                 </div>
 
                                                 <div className="min-w-0">
@@ -2040,7 +2069,10 @@ const PortfolioManagement = () => {
 
                                             <div className="flex items-center gap-3 self-end sm:self-center">
                                                 <span className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-neutral-600">
-                                                    {(story.images || []).length}/30 PHOTOS
+                                                    {Math.min(
+                                                        (story.images || []).filter((img) => (typeof img === 'string' ? Boolean(img) : Boolean(img?.url))).length,
+                                                        MAX_STORY_IMAGES
+                                                    )}/{MAX_STORY_IMAGES} PHOTOS
                                                 </span>
 
                                                 <button
