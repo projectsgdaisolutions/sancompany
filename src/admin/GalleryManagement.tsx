@@ -32,6 +32,7 @@ interface GalleryAdminAlbum extends GalleryCouple {
   location: string;
   image: string;
   order: number;
+  photoCount?: number;
 }
 
 interface GalleryHeader {
@@ -163,6 +164,10 @@ const normalizeAlbum = (album: Partial<GalleryAdminAlbum>, index: number): Galle
     typeof album?.order === "number"
       ? album.order
       : index,
+  photoCount:
+    typeof album?.photoCount === "number"
+      ? album.photoCount
+      : undefined,
 });
 
 const normalizeAlbums = (items: unknown): GalleryAdminAlbum[] =>
@@ -422,7 +427,7 @@ export default function GalleryManagement() {
       ----------------------------------------------------- */
 
       const galleryRes = await fetch(
-        `${API_BASE_URL}/api/gallery.php?include_inactive=1`
+        `${API_BASE_URL}/api/gallery.php?include_inactive=1&include_media=0`
       );
 
       const galleryData =
@@ -445,33 +450,8 @@ export default function GalleryManagement() {
        * Photo Gallery albums.
        */
 
-      if (
-        galleryData.galleryBySlug &&
-        typeof galleryData.galleryBySlug ===
-          "object"
-      ) {
-        setAlbumPhotos(
-          galleryData.galleryBySlug as Record<string, AdminGalleryPhoto[]>
-        );
-      } else {
-        setAlbumPhotos({});
-      }
-
-      /*
-       * recentBySlug contains Recent albums.
-       */
-
-      if (
-        galleryData.recentBySlug &&
-        typeof galleryData.recentBySlug ===
-          "object"
-      ) {
-        setRecentAlbumPhotos(
-          galleryData.recentBySlug as Record<string, AdminGalleryPhoto[]>
-        );
-      } else {
-        setRecentAlbumPhotos({});
-      }
+      setAlbumPhotos({});
+      setRecentAlbumPhotos({});
     } catch (error: unknown) {
       console.error(
         "Gallery load error:",
@@ -523,7 +503,7 @@ export default function GalleryManagement() {
       const response = await fetch(
         `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(
           slug
-        )}`
+        )}&section=${encodeURIComponent(section)}`
       );
 
       const data =
@@ -730,7 +710,20 @@ export default function GalleryManagement() {
       image:
         newAlbum.image || "",
       order: targetList.length,
+      photoCount: 0,
     };
+
+    if (newAlbumSection === "recentAlbums") {
+      setRecentAlbumPhotos((prev) => ({
+        ...prev,
+        [generatedSlug]: [],
+      }));
+    } else {
+      setAlbumPhotos((prev) => ({
+        ...prev,
+        [generatedSlug]: [],
+      }));
+    }
 
     if (
       newAlbumSection ===
@@ -2492,8 +2485,14 @@ export default function GalleryManagement() {
             album.slug
           ] || [];
 
+    const hasLoadedPhotos = isRecent
+      ? recentAlbumPhotos[album.slug] !== undefined
+      : albumPhotos[album.slug] !== undefined;
+
     const photoCount =
-      photos.length;
+      hasLoadedPhotos
+        ? photos.length
+        : album.photoCount || 0;
 
     const coverKey =
       `cover-${section}-${index}`;

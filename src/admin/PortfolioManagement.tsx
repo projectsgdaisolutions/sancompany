@@ -31,12 +31,6 @@ type PortfolioStory = {
 }
 
 type PortfolioContent = {
-    heroEyebrow: string
-    heroLabel: string
-    heroLine1: string
-    heroLine2: string
-    heroLine3: string
-    heroVideoUrl: string
     stories: PortfolioStory[]
     ctaEyebrow: string
     ctaLine1: string
@@ -57,9 +51,8 @@ type StatusMessage = {
  * It does not redesign the public Portfolio.
  *
  * Public order:
- *   01 Hero
- *   02 Featured Wedding Stories
- *   03 Final CTA
+ *   01 Featured Wedding Stories
+ *   02 Final CTA
  *
  * Each story can have up to 30 images. Every image persists as
  * { url, visible }, while the public Portfolio keeps its existing
@@ -114,12 +107,6 @@ const DEFAULT_STORIES: PortfolioStory[] = [
 ]
 
 const DEFAULT_PORTFOLIO: PortfolioContent = {
-    heroEyebrow: 'SAN / PORTFOLIO',
-    heroLabel: 'Selected Works & Films',
-    heroLine1: 'Timeless',
-    heroLine2: 'moments,',
-    heroLine3: 'beautifully captured.',
-    heroVideoUrl: '',
     stories: DEFAULT_STORIES,
     ctaEyebrow: 'SAN Photography',
     ctaLine1: 'Your story.',
@@ -207,23 +194,6 @@ const normalizePortfolio = (saved: unknown): PortfolioContent => {
     return {
         ...clone(DEFAULT_PORTFOLIO),
         ...source,
-        heroEyebrow:
-            source.heroEyebrow ??
-            DEFAULT_PORTFOLIO.heroEyebrow,
-        heroLabel:
-            source.heroLabel ??
-            DEFAULT_PORTFOLIO.heroLabel,
-        heroLine1:
-            source.heroLine1 ??
-            DEFAULT_PORTFOLIO.heroLine1,
-        heroLine2:
-            source.heroLine2 ??
-            DEFAULT_PORTFOLIO.heroLine2,
-        heroLine3:
-            source.heroLine3 ??
-            DEFAULT_PORTFOLIO.heroLine3,
-        heroVideoUrl:
-            source.heroVideoUrl ?? '',
         stories,
         ctaEyebrow:
             source.ctaEyebrow ??
@@ -1242,12 +1212,6 @@ const findLocalVideo = (
     return typeof entry?.[1] === 'string' ? entry[1] : ''
 }
 
-const LOCAL_HERO_VIDEO =
-    findLocalVideo(
-        'video2/VIDEOS',
-        'KAPIL PAYAL WEDDING FILM'
-    )
-
 /* =========================================================
    MAIN MANAGEMENT
 ========================================================= */
@@ -1878,142 +1842,13 @@ const PortfolioManagement = () => {
 
             <main className="mx-auto max-w-[1200px] px-5 py-7 sm:px-8 sm:py-10">
                 {/* =================================================
-                    01 — HERO
+                    01 — FEATURED WEDDING STORIES
                 ================================================= */}
 
                 <SectionCard
                     number={1}
-                    title="Hero Section"
-                    description="Same Hero content as the existing public Portfolio. Only the content/media source is managed here; the public design remains unchanged."
-                >
-                    <div className="space-y-6">
-                        <Field
-                            label="Eyebrow"
-                            value={
-                                portfolio.heroEyebrow
-                            }
-                            onChange={(value) =>
-                                setField(
-                                    'heroEyebrow',
-                                    value
-                                )
-                            }
-                        />
-
-                        <Field
-                            label="Label Above Heading"
-                            value={
-                                portfolio.heroLabel
-                            }
-                            onChange={(value) =>
-                                setField(
-                                    'heroLabel',
-                                    value
-                                )
-                            }
-                        />
-
-                        <div className="grid gap-5 md:grid-cols-3">
-                            <Field
-                                label="Heading Line 1"
-                                value={
-                                    portfolio.heroLine1
-                                }
-                                onChange={(value) =>
-                                    setField(
-                                        'heroLine1',
-                                        value
-                                    )
-                                }
-                            />
-
-                            <Field
-                                label="Heading Line 2 — Italic"
-                                value={
-                                    portfolio.heroLine2
-                                }
-                                onChange={(value) =>
-                                    setField(
-                                        'heroLine2',
-                                        value
-                                    )
-                                }
-                            />
-
-                            <Field
-                                label="Heading Line 3"
-                                value={
-                                    portfolio.heroLine3
-                                }
-                                onChange={(value) =>
-                                    setField(
-                                        'heroLine3',
-                                        value
-                                    )
-                                }
-                            />
-                        </div>
-
-                        <div className="border-t border-neutral-200 pt-6">
-                            <VideoUploader
-                                label="Hero Video — Current / Replace / Remove"
-                                value={
-                                    portfolio.heroVideoUrl ||
-                                    ''
-                                }
-                                fallbackSrc={
-                                    LOCAL_HERO_VIDEO
-                                }
-                                onChange={(value) =>
-                                    setField(
-                                        'heroVideoUrl',
-                                        value
-                                    )
-                                }
-                            />
-                        </div>
-
-                        <div className="rounded-2xl bg-neutral-900 p-6">
-                            <div className="flex items-center gap-3">
-                                <span className="h-px w-8 bg-[#C9A467]" />
-                                <span className="text-[9px] uppercase tracking-[0.4em] text-white/70">
-                                    {
-                                        portfolio.heroEyebrow
-                                    }
-                                </span>
-                            </div>
-
-                            <p className="mt-5 text-[9px] uppercase tracking-[0.4em] text-[#C9A467]">
-                                {
-                                    portfolio.heroLabel
-                                }
-                            </p>
-
-                            <p className="mt-3 max-w-4xl text-3xl font-light leading-[0.9] tracking-[-0.04em] text-white sm:text-5xl">
-                                {
-                                    portfolio.heroLine1
-                                }{' '}
-                                <em>
-                                    {
-                                        portfolio.heroLine2
-                                    }
-                                </em>{' '}
-                                {
-                                    portfolio.heroLine3
-                                }
-                            </p>
-                        </div>
-                    </div>
-                </SectionCard>
-
-                {/* =================================================
-                    02 — FEATURED WEDDING STORIES
-                ================================================= */}
-
-                <SectionCard
-                    number={2}
                     title="Featured Wedding Stories"
-                    description="This is the exact content block shown after the Hero on the public Portfolio. Each story keeps its existing title, date, strapline, paragraphs, video and editorial image carousel."
+                    description="This is the exact content block shown on the public Portfolio. Each story keeps its existing title, date, strapline, paragraphs, video and editorial image carousel."
                 >
                     <div className="mb-6 rounded-xl border border-[#e6dccb] bg-[#faf7f0] px-4 py-4 text-xs leading-5 text-[#74634d]">
                         <strong>Image rule:</strong> each wedding
@@ -2268,11 +2103,11 @@ const PortfolioManagement = () => {
                 </SectionCard>
 
                 {/* =================================================
-                    03 — FINAL CTA
+                    02 — FINAL CTA
                 ================================================= */}
 
                 <SectionCard
-                    number={3}
+                    number={2}
                     title="Final CTA Section"
                     description="Same final Portfolio CTA: Your story. Our frame. and Start Your Story."
                 >

@@ -54,6 +54,10 @@ require_once __DIR__ . '/../config/database.php';
 
 handleCors();
 
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 const MAX_GALLERY_CARDS = 16;
@@ -967,24 +971,33 @@ try {
 
 
         /*
-         * Get all active media.
+         * Admin can request album metadata and counts without loading
+         * every media row. Album media is fetched when an album is opened.
          */
-        $stmt =
-            $pdo->query(
-                mediaSelectSql() .
-                '
-                WHERE is_active = 1
-                ORDER BY
-                    `order` ASC,
-                    id ASC
-                '
-            );
+        $includeMedia = !(
+            isset($_GET['include_media']) &&
+            $_GET['include_media'] === '0'
+        );
 
+        $rows = [];
 
-        $rows =
-            $stmt->fetchAll(
-                PDO::FETCH_ASSOC
-            );
+        if ($includeMedia) {
+            $stmt =
+                $pdo->query(
+                    mediaSelectSql() .
+                    '
+                    WHERE is_active = 1
+                    ORDER BY
+                        `order` ASC,
+                        id ASC
+                    '
+                );
+
+            $rows =
+                $stmt->fetchAll(
+                    PDO::FETCH_ASSOC
+                );
+        }
 
 
         $galleryBySlug = [];

@@ -34,12 +34,6 @@ interface PortfolioStory {
 }
 
 interface PortfolioContent {
-  heroEyebrow: string;
-  heroLabel: string;
-  heroLine1: string;
-  heroLine2: string;
-  heroLine3: string;
-  heroVideoUrl: string;
   stories: PortfolioStory[];
   ctaEyebrow: string;
   ctaLine1: string;
@@ -66,23 +60,6 @@ const imageFiles = import.meta.glob(
   { eager: true, import: 'default' }
 )
 
-const videoLoaders = import.meta.glob(
-  '../assets/portfolio/wedding/**/*.{mp4,mov,MP4,MOV}'
-)
-
-// Helper to find specific assets by folder and partial filename
-function findAsset<T>(map: Record<string, T>, folder: string, partialName: string): T | null {
-  const entries = Object.entries(map) as [string, T][]
-  const found = entries.find(([path]) => {
-    const normalized = path.replace(/\\/g, '/').toLowerCase()
-    return (
-      normalized.includes(`/wedding/${folder.toLowerCase()}/`) &&
-      normalized.includes(partialName.toLowerCase())
-    )
-  })
-  return found?.[1] || null
-}
-
 // Helper to fetch ALL images from a specific folder automatically
 function getFolderImages(folderName: string): string[] {
   return Object.keys(imageFiles)
@@ -98,9 +75,6 @@ function getFolderImages(folderName: string): string[] {
 const kapilPayalImages = getFolderImages('Kapil&Payal1');
 const pratikMeghaImages = getFolderImages('PRATIK & MEGHA');
 const tanmayAchalImages = getFolderImages('Tanmay&Achal');
-
-// Specific loaders for Hero
-const video2Loader = findAsset<() => Promise<unknown>>(videoLoaders, 'video2/VIDEOS', 'KAPIL PAYAL WEDDING FILM')
 
 /* =========================================================
    FOLDER KEY → LOCAL IMAGES MAP
@@ -157,12 +131,6 @@ const DEFAULT_STORIES = [
 ];
 
 const DEFAULT_PORTFOLIO: PortfolioContent = {
-  heroEyebrow: 'SAN / PORTFOLIO',
-  heroLabel: 'Selected Works & Films',
-  heroLine1: 'Timeless',
-  heroLine2: 'moments,',
-  heroLine3: 'beautifully captured.',
-  heroVideoUrl: '',
   stories: DEFAULT_STORIES,
   ctaEyebrow: 'SAN Photography',
   ctaLine1: 'Your story.',
@@ -222,23 +190,6 @@ function useGoogleFonts() {
     link.href = 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,300;1,9..144,400&family=Manrope:wght@300;400;500;600;700;800&display=swap'
     document.head.appendChild(link)
   }, [])
-}
-
-function useLazyVideoSrc(loader: (() => Promise<unknown>) | null, enabled = true) {
-  const [src, setSrc] = useState<string | null>(null)
-  useEffect(() => {
-    if (!enabled || !loader || src) return
-    let active = true
-    loader().then((mod: unknown) => {
-      if (active && typeof mod === 'object' && mod !== null && 'default' in mod && typeof mod.default === 'string') {
-        setSrc(mod.default)
-      }
-    })
-    return () => {
-      active = false
-    }
-  }, [enabled, loader, src])
-  return src
 }
 
 function GlobalMotionStyles() {
@@ -659,41 +610,6 @@ function FeaturedStories({ stories, onImageClick, onVideoClick }: FeaturedStorie
   )
 }
 
-/* =========================================================
-   CLEAN VIDEO REEL
-========================================================= */
-
-interface CleanVideoReelProps { src: string; className?: string }
-
-function CleanVideoReel({ src, className = '' }: CleanVideoReelProps) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const [loaded, setLoaded] = useState(false)
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] })
-  const y = useSpring(useTransform(scrollYProgress, [0, 1], ['-5%', '5%']), { stiffness: 80, damping: 25 })
-
-  return (
-    <div ref={ref} className={`relative overflow-hidden bg-black ${className}`}>
-      {!loaded && (
-        <div className="absolute inset-0 animate-pulse bg-black" />
-      )}
-      {src && (
-        <motion.div className="absolute -top-[5%] left-0 h-[110%] w-full" style={{ y }}>
-          <video
-            src={src}
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="metadata"
-            onLoadedData={() => setLoaded(true)}
-            className={`h-full w-full object-cover object-center transition-opacity duration-700 ${loaded ? 'opacity-90' : 'opacity-0'}`}
-          />
-        </motion.div>
-      )}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-    </div>
-  )
-}
 
 /* =========================================================
    LIGHTBOX MODAL
@@ -830,16 +746,6 @@ function Portfolio() {
     })
   }, [])
 
-  const heroRef = useRef<HTMLDivElement | null>(null)
-  const { scrollYProgress: heroProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] })
-  const heroTextY = useSpring(useTransform(heroProgress, [0, 1], ['0%', '50%']), { stiffness: 80, damping: 20 })
-  const heroTextOpacity = useTransform(heroProgress, [0, 0.8], [1, 0])
-  const heroVideoScale = useSpring(useTransform(heroProgress, [0, 1], [1, 1.3]), { stiffness: 80, damping: 20 })
-
-  const localHeroVideoSrc = useLazyVideoSrc(video2Loader, true)
-  const heroVideoSrc = portfolioContent.heroVideoUrl || localHeroVideoSrc
-  const [heroVideoReady, setHeroVideoReady] = useState(false)
-
   const handleImageClick = (storyId: string, images: string[], index: number) => setLightboxState({ storyId, images, index, type: 'image' });
   const handleVideoClick = (src: string) => setLightboxState({ src, type: 'video' });
 
@@ -876,12 +782,6 @@ function Portfolio() {
           });
 
           setPortfolioContent({
-            heroEyebrow: remote.heroEyebrow ?? DEFAULT_PORTFOLIO.heroEyebrow,
-            heroLabel: remote.heroLabel ?? DEFAULT_PORTFOLIO.heroLabel,
-            heroLine1: remote.heroLine1 ?? DEFAULT_PORTFOLIO.heroLine1,
-            heroLine2: remote.heroLine2 ?? DEFAULT_PORTFOLIO.heroLine2,
-            heroLine3: remote.heroLine3 ?? DEFAULT_PORTFOLIO.heroLine3,
-            heroVideoUrl: remote.heroVideoUrl ?? DEFAULT_PORTFOLIO.heroVideoUrl,
             stories: finalStories,
             ctaEyebrow: remote.ctaEyebrow ?? DEFAULT_PORTFOLIO.ctaEyebrow,
             ctaLine1: remote.ctaLine1 ?? DEFAULT_PORTFOLIO.ctaLine1,
@@ -927,61 +827,7 @@ function Portfolio() {
         )}
       </AnimatePresence>
 
-      <main className="relative bg-[#F9F7F2] text-[#171717]" style={{ fontFamily: FONT_DISPLAY }}>
-
-        {/* HERO SECTION - Mobile-first margins/padding */}
-        <section
-          ref={heroRef}
-          className="relative h-[60vh] min-h-[400px] w-full overflow-hidden bg-black mt-20 sm:mt-24 md:h-[74vh] md:min-h-[460px] lg:mt-36"
-        >
-          <motion.div className="absolute inset-0 h-full w-full" style={{ scale: heroVideoScale }}>
-            {heroVideoSrc && (
-              <video
-                src={heroVideoSrc}
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="auto"
-                onLoadedData={() => setHeroVideoReady(true)}
-                className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-700 ${heroVideoReady ? 'opacity-70' : 'opacity-0'}`}
-              />
-            )}
-          </motion.div>
-
-          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/30" />
-
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.35, ease: EASE_EXPO }}
-            className="absolute left-4 top-4 sm:left-10 sm:top-8 lg:left-16"
-          >
-            <div className="flex items-center gap-3">
-              <span className="h-px w-8 bg-[#C9A467]" />
-              <p className="text-[8px] uppercase tracking-[0.4em] text-white/70 sm:text-[9px] sm:tracking-[0.45em]">{pc.heroEyebrow}</p>
-            </div>
-          </motion.div>
-
-          <motion.div
-            className="absolute inset-x-0 bottom-0 px-4 pb-8 sm:px-10 sm:pb-14 lg:px-16 lg:pb-16"
-            style={{ y: heroTextY, opacity: heroTextOpacity }}
-          >
-            <div className="mx-auto max-w-7xl">
-              <p className="mb-2 text-[8px] uppercase tracking-[0.4em] text-[#C9A467] sm:mb-4 sm:text-[9px] sm:tracking-[0.45em]">{pc.heroLabel}</p>
-              <RevealHeading
-                as="h1"
-                lines={[
-                  { text: pc.heroLine1 || 'Timeless', block: true },
-                  { text: pc.heroLine2 || 'moments,', italic: true, block: true },
-                  { text: pc.heroLine3 || 'beautifully captured.', block: true }
-                ]}
-                className="max-w-6xl text-[clamp(2rem,8vw,6rem)] font-light leading-[0.9] tracking-[-0.04em] text-white sm:leading-[0.86] sm:tracking-[-0.065em]"
-              />
-            </div>
-          </motion.div>
-        </section>
-
+        <main className="relative bg-[#F9F7F2] pt-20 text-[#171717] md:pt-24" style={{ fontFamily: FONT_DISPLAY }}>
         {/* FEATURED STORIES (Independent story images + independent story videos) */}
         <FeaturedStories
           stories={pc.stories || []}

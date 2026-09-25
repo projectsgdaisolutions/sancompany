@@ -780,7 +780,9 @@ function normalizeAndValidateFilms(array $films, bool $rejectInvalidCategories =
             $normalizedFilm['category'] = $category;
         }
 
-        $normalizedItems[] = $normalizedFilm;
+        if (isPopulatedFilm($normalizedFilm)) {
+            $normalizedItems[] = $normalizedFilm;
+        }
     }
 
     $normalized = $films;
@@ -1527,6 +1529,62 @@ try {
             200
         );
 
+        exit;
+    }
+
+
+    /* =====================================================
+       DELETE FILM
+    ===================================================== */
+
+    if ($method === 'DELETE') {
+        requireAdminAuth();
+
+        if (($_GET['section'] ?? '') !== 'films') {
+            errorResponse('Films section is required.', 400);
+        }
+
+        $filmId = trim((string) ($_GET['id'] ?? ''));
+        if ($filmId === '') {
+            errorResponse('Film ID is required.', 400);
+        }
+
+        $gallery = getGalleryContent($pdo);
+        $films = isset($gallery['films']) && is_array($gallery['films'])
+            ? normalizeAndValidateFilms($gallery['films'])
+            : getFilmsContent($pdo);
+
+        $found = false;
+        $remaining = [];
+
+        foreach ($films['items'] as $film) {
+            if ((string) ($film['id'] ?? '') === $filmId) {
+                $found = true;
+                continue;
+            }
+            $remaining[] = $film;
+        }
+
+        if (!$found) {
+            errorResponse('Film not found.', 404);
+        }
+
+        foreach ($remaining as $index => &$film) {
+            $film['order'] = $index;
+        }
+        unset($film);
+
+        $films['items'] = array_values($remaining);
+        $gallery['films'] = normalizeAndValidateFilms($films);
+        saveGalleryContent($pdo, $gallery);
+
+        jsonResponse([
+            'success' => true,
+            'message' => 'Film deleted successfully.',
+            'content' => [
+                'films' => $gallery['films'],
+            ],
+        ], 200);
         exit;
     }
 

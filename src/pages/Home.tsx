@@ -1626,14 +1626,10 @@ function Home() {
           {/* Changed to 3 columns on mobile and desktop (3 by 3 layout) */}
           <FadeIn className="grid grid-cols-3 gap-x-2 gap-y-4 sm:gap-x-6 sm:gap-y-8 lg:gap-x-10 lg:gap-y-10 max-w-6xl mx-auto">
             {couplesToRender.map((couple, index) => {
-              const slug = couple.name
-                .toLowerCase()
-                .replace(/\s*&\s*/g, '-')
-                .replace(/\s+/g, '-')
               return (
                 <Link
                   key={couple.id || `couple-${index}`}
-                  to={`/gallery/${couple.slug || slug}`}
+                  to={`/gallery/${couple.slug}`}
                   className="group cursor-pointer block"
                   style={{ textDecoration: 'none', color: 'inherit' }}
                 >

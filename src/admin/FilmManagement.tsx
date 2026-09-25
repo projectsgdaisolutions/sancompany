@@ -50,6 +50,8 @@ const isPopulatedFilm = (film: FilmItem) =>
     typeof film?.videoUrl === "string" &&
     film.videoUrl.trim().length > 0;
 
+const hasEmptyFilmDraft = (film: FilmItem) => !isPopulatedFilm(film);
+
 const isFilmInCategory = (film: FilmItem, category: FilmCategory) =>
     normalizeFilmCategory(film.category) === normalizeFilmCategory(category);
 
@@ -290,7 +292,7 @@ const FilmManagement = () => {
         if (field === "category") {
             const currentCategory = films.items[index]?.category;
             const categoryCount = films.items.filter(
-                (film) => normalizeFilmCategory(film.category) === normalizeFilmCategory(value)
+                (film) => isPopulatedFilm(film) && normalizeFilmCategory(film.category) === normalizeFilmCategory(value)
             ).length;
             const categoryLimit = FILM_CATEGORY_LIMITS[value as FilmCategory];
 
@@ -328,6 +330,15 @@ const FilmManagement = () => {
     ======================================================= */
 
     const addFilm = (category: FilmCategory | "All" = activeFilter) => {
+        if (films.items.some(hasEmptyFilmDraft)) {
+            setError(
+                "Finish uploading the current draft or remove it before adding another film."
+            );
+            setMessage("");
+            setCategoryPickerOpen(false);
+            return;
+        }
+
         if (category === "All") {
             setCategoryPickerOpen(true);
             return;
@@ -343,7 +354,9 @@ const FilmManagement = () => {
             return;
         }
 
-        const categoryCount = films.items.filter((film) => isFilmInCategory(film, category)).length;
+        const categoryCount = films.items.filter(
+            (film) => isPopulatedFilm(film) && isFilmInCategory(film, category)
+        ).length;
 
         if (categoryCount >= FILM_CATEGORY_LIMITS[category]) {
             setError(
@@ -373,27 +386,53 @@ const FilmManagement = () => {
        DELETE FILM
     ======================================================= */
 
-    const deleteFilm = (index: number) => {
+    const deleteFilm = async (index: number) => {
         const confirmed = window.confirm(
             "Are you sure you want to remove this film?"
         );
 
         if (!confirmed) return;
 
-        setFilms((previous) => ({
-            ...previous,
-            items: previous.items
-                .filter(
-                    (_, itemIndex) =>
-                        itemIndex !== index
-                )
-                .map((item, itemIndex) => ({
-                    ...item,
-                    order: itemIndex,
-                })),
-        }));
+        const film = films.items[index];
+        if (!film) return;
 
-        setMessage("");
+        if (film.isDraft || !film.id) {
+            setFilms((previous) => ({
+                ...previous,
+                items: previous.items
+                    .filter((item) => item.id !== film.id)
+                    .map((item, itemIndex) => ({ ...item, order: itemIndex })),
+            }));
+            setMessage("");
+            return;
+        }
+
+        try {
+            setError("");
+            const response = await fetch(
+                `${API_BASE_URL}/api/content.php?section=films&id=${encodeURIComponent(film.id)}`,
+                {
+                    method: "DELETE",
+                    headers: getAuthHeaders(),
+                    cache: "no-store",
+                }
+            );
+            const data = await response.json();
+
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || "Failed to delete film.");
+            }
+
+            setFilms((previous) => ({
+                ...previous,
+                items: Array.isArray(data.content?.films?.items)
+                    ? data.content.films.items
+                    : previous.items.filter((item) => item.id !== film.id),
+            }));
+            setMessage("Film deleted successfully.");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to delete film.");
+        }
     };
 
     /* =======================================================
@@ -534,7 +573,9 @@ const FilmManagement = () => {
             setFilms((previous) => ({
                 ...previous,
                 items: previous.items.map((item) =>
-                    item.id === filmId ? { ...item, videoUrl: result.url } : item
+                    item.id === filmId
+                        ? { ...item, videoUrl: result.url }
+                        : item
                 ),
             }));
             setUploadProgressByFilmId((previous) => ({ ...previous, [filmId]: 100 }));
@@ -847,7 +888,9 @@ const FilmManagement = () => {
     const categoryCounts = useMemo(() => {
         return FILM_CATEGORIES.reduce(
             (counts, category) => {
-                counts[category] = films.items.filter((film) => isFilmInCategory(film, category)).length;
+                counts[category] = films.items.filter(
+                    (film) => isPopulatedFilm(film) && isFilmInCategory(film, category)
+                ).length;
 
                 return counts;
             },
@@ -1668,9 +1711,23 @@ const FilmManagement = () => {
                                                     Category
                                                 </label>
 
-                                                <div className="rounded-lg border border-black/10 bg-[#f8f6f1] px-3 py-3 text-xs text-black/60">
-                                                    {film.category || "Uncategorized"}
-                                                </div>
+                                                <select
+                                                    value={canonicalFilmCategory(film.category) || "Recent Cinema"}
+                                                    onChange={(e) =>
+                                                        updateFilm(
+                                                            index,
+                                                            "category",
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    className="w-full rounded-lg border border-black/10 bg-[#f8f6f1] px-3 py-3 text-xs text-black/60 outline-none focus:border-black/30"
+                                                >
+                                                    {FILM_CATEGORIES.map((category) => (
+                                                        <option key={category} value={category}>
+                                                            {category}
+                                                        </option>
+                                                    ))}
+                                                </select>
                                             </div>
 
                                             <div>

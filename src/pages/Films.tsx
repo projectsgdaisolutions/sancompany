@@ -331,6 +331,8 @@ function FilmCard({
   // isPlaying = actual video play state, synced via native events
   const [isActivated, setIsActivated] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(Boolean(film.videoUrl));
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     const video =
@@ -364,9 +366,28 @@ function FilmCard({
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => setIsPlaying(false);
+    const onReady = () => {
+      setIsLoading(false);
+      setHasError(false);
+    };
+    const onWaiting = () => setIsLoading(true);
+    const onPlaying = () => {
+      setIsLoading(false);
+      setHasError(false);
+    };
+    const onError = () => {
+      setIsLoading(false);
+      setHasError(true);
+    };
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
     video.addEventListener("ended", onEnded);
+    video.addEventListener("loadeddata", onReady);
+    video.addEventListener("canplay", onReady);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("stalled", onWaiting);
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("error", onError);
 
     return () => {
       video.removeEventListener(
@@ -376,6 +397,12 @@ function FilmCard({
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
+      video.removeEventListener("loadeddata", onReady);
+      video.removeEventListener("canplay", onReady);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("stalled", onWaiting);
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("error", onError);
     };
   }, [film.videoUrl]);
 
@@ -456,7 +483,7 @@ function FilmCard({
           handleCardClick
         }
       >
-        {film.videoUrl ? (
+        {film.videoUrl && !hasError ? (
           <video
             ref={videoRef}
             src={film.videoUrl}
@@ -464,17 +491,33 @@ function FilmCard({
             loop
             playsInline
             preload={index < 4 ? "metadata" : "none"}
+            onLoadedData={() => setIsLoading(false)}
+            onCanPlay={() => setIsLoading(false)}
+            onWaiting={() => setIsLoading(true)}
+            onStalled={() => setIsLoading(true)}
+            onPlaying={() => setIsLoading(false)}
+            onError={() => {
+              setIsLoading(false);
+              setHasError(true);
+            }}
             onClick={handleVideoClick}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[9px] uppercase tracking-[0.2em] text-white/40">
-            No Film Available
+            {hasError ? "Film unavailable" : "No Film Available"}
+          </div>
+        )}
+
+        {isLoading && !hasError && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-label="Loading video" />
           </div>
         )}
 
         {!isActivated &&
-          film.videoUrl && (
+          film.videoUrl &&
+          !hasError && (
             <button
               onClick={
                 handleExpandClick
@@ -646,7 +689,10 @@ function Films() {
           : [];
 
       const visibleItems = items.filter(
-        (film) => film.isActive !== false
+        (film) =>
+          film.isActive !== false &&
+          typeof film.videoUrl === "string" &&
+          film.videoUrl.trim().length > 0
       );
 
       if (activeFilter === "All") {
