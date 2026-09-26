@@ -1267,7 +1267,7 @@ const FilmManagement = () => {
                     <div className="space-y-5">
                         <div>
                             <label className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-black/50">
-                                Hero Heading
+                                Films Section Label
                             </label>
 
                             <input
@@ -1287,9 +1287,7 @@ const FilmManagement = () => {
                         </div>
 
                         <div className="rounded-xl bg-[#f8f6f1] p-4 text-xs leading-5 text-black/50">
-                            This heading is displayed below
-                            the hero video on the public Films
-                            page.
+                            This label is displayed before the public Films category filters.
                         </div>
                     </div>
                 </div>

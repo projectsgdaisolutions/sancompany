@@ -25,6 +25,21 @@ const API_BASE_URL = API_URL
 const ease = [0.22, 1, 0.36, 1] as const
 const FONT_DISPLAY = "'Fraunces', 'Iowan Old Style', Georgia, serif"
 
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function addCalendarDays(dateValue: string, days: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue)
+  if (!match) return ''
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  date.setDate(date.getDate() + days)
+  return formatDateInput(date)
+}
+
 function useGoogleFonts() {
   useEffect(() => {
     const id = 'san-contact-vogue-fonts'
@@ -271,6 +286,9 @@ function Contact() {
   const rawWhatsapp = (whatsapp || phone || '9359338557').replace(/\D/g, '')
   const normalizedWhatsapp = rawWhatsapp.length === 10 ? `91${rawWhatsapp}` : rawWhatsapp
   const whatsappUrl = normalizedWhatsapp ? `https://wa.me/${normalizedWhatsapp}` : '#'
+  const todayDate = formatDateInput(new Date())
+  const endDateMin = formData.startDate || todayDate
+  const endDateMax = addCalendarDays(endDateMin, 5)
 
   /* =======================================================
      INPUT CHANGE & SUBMIT
@@ -278,11 +296,35 @@ function Contact() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
+    if (name === 'startDate') {
+      const rangeStart = value || formatDateInput(new Date())
+      const rangeEnd = addCalendarDays(rangeStart, 5)
+      setFormData((prev) => ({
+        ...prev,
+        startDate: value,
+        endDate: prev.endDate && (prev.endDate < rangeStart || prev.endDate > rangeEnd)
+          ? ''
+          : prev.endDate,
+      }))
+      return
+    }
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+
+    const today = formatDateInput(new Date())
+    if (formData.startDate && formData.startDate < today) {
+      alert('Start Date cannot be before today.')
+      return
+    }
+    const rangeStart = formData.startDate || today
+    const latestEndDate = addCalendarDays(rangeStart, 5)
+    if (formData.endDate && (formData.endDate < rangeStart || formData.endDate > latestEndDate)) {
+      alert('End Date must be on or after the start date and within 5 days of it.')
+      return
+    }
 
     // Validate required fields
     if (!formData.name?.trim()) {
@@ -424,6 +466,7 @@ function Contact() {
                     <input
                       id="startDate" name="startDate" type="date"
                       value={formData.startDate} onChange={handleChange}
+                      min={todayDate}
                       className="w-full border-b border-black/20 bg-transparent py-1.5 text-sm outline-none focus:border-[#171717]"
                     />
                   </div>
@@ -432,6 +475,7 @@ function Contact() {
                     <input
                       id="endDate" name="endDate" type="date"
                       value={formData.endDate} onChange={handleChange}
+                      min={endDateMin} max={endDateMax}
                       className="w-full border-b border-black/20 bg-transparent py-1.5 text-sm outline-none focus:border-[#171717]"
                     />
                   </div>

@@ -6,7 +6,6 @@ import type { GalleryCouple, GalleryPhoto } from "../types";
 import { API_URL, readApiJson } from "../services/api";
 
 const API_BASE_URL = API_URL;
-const MAX_ALBUM_PHOTOS = 50;
 
 /* =========================================================
    FALLBACK COUPLES
@@ -92,9 +91,7 @@ export default function AlbumDetail() {
                 matchedCouple = photosData.album;
               }
               if (Array.isArray(photosData.photos)) {
-                // Maximum 50 photos for this album
                 albumPhotosList = photosData.photos
-                  .slice(0, MAX_ALBUM_PHOTOS)
                   .map((p: GalleryPhoto) => p.imageUrl || p.image_url || p.url)
                   .filter(Boolean);
               }
@@ -349,7 +346,7 @@ export default function AlbumDetail() {
             </p>
             {images.length > 0 && (
               <span className="text-[10px] uppercase tracking-[0.25em] text-neutral-400">
-                {images.length} / {MAX_ALBUM_PHOTOS} photos
+                {images.length} photos
               </span>
             )}
           </div>

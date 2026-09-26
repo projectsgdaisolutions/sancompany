@@ -33,11 +33,11 @@ ob_start();
  *   couples + recentAlbums = 16
  *
  * Maximum photos per individual card:
- *   40
+ *   500
  *
  * Cover image:
  *   Stored in website_content.gallery
- *   NOT counted as one of the 40 photos.
+ *   NOT counted against the album photo limit.
  *
  * Actual media files:
  *   Cloudinary
@@ -63,7 +63,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 const MAX_GALLERY_CARDS = 16;
 const MAX_COUPLES_CARDS = 12;
 const MAX_RECENT_CARDS = 4;
-const MAX_PHOTOS_PER_CARD = 50;
+const MAX_PHOTOS_PER_CARD = 500;
 
 
 /* =========================================================
@@ -384,7 +384,7 @@ function slugExists(
  * Count ALL media rows for category.
  *
  * We intentionally count all rows, not only active rows.
- * This ensures the hard 40-photo limit cannot be bypassed
+ * This ensures the album photo limit cannot be bypassed
  * by changing is_active.
  */
 function getPhotoCount(

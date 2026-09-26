@@ -13,7 +13,6 @@ import Films from "./pages/Films";
 import Blog from "./pages/Blog";
 import Careers from "./pages/Careers";
 import Contact from "./pages/Contact";
-import AlbumDetail from "./pages/AlbumDetail";
 
 /* =====================================================
    PUBLIC COMPONENTS
@@ -209,7 +208,7 @@ function App() {
           path="/gallery/:slug"
           element={
             <PublicLayout>
-              <AlbumDetail />
+              <Gallery />
             </PublicLayout>
           }
         />

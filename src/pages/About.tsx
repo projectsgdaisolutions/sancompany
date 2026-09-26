@@ -74,71 +74,7 @@ const DEFAULT_ABOUT = {
   teamEyebrow: 'The Creative Team',
   teamHeadingNormal: 'People behind',
   teamHeadingItalic: 'the frames.',
-  teamMembers: [
-    {
-      id: 'team-01',
-      number: '01',
-      name: 'AIFAZ KHAN',
-      role: 'Videographer',
-      description:
-        'AIFAZ is a talented member of the SAN Photography team, contributing creativity and expertise to every project. He specializes in cinematography and works closely with clients to ensure every important moment is captured beautifully.',
-      image: findTeamImage('AHEFAZ KHAN') || findTeamImage('AIFAZ KHAN') || '',
-    },
-    {
-      id: 'team-02',
-      number: '02',
-      name: 'BHAGWAT SHAHARE',
-      role: 'Videographer',
-      description:
-        'Bhagwat is part of the creative team at SAN Photography and plays an important role in delivering high-quality photographs and films. With a passion for photography and storytelling, he brings a unique creative perspective to every celebration.',
-      image: findTeamImage('BHAGWAT SHAHARE') || '',
-    },
-    {
-      id: 'team-03',
-      number: '03',
-      name: 'NITIN BRAHMANKAR',
-      role: 'Photographer',
-      description:
-        'A passionate and talented candid photographer with a keen eye for capturing genuine emotions, natural expressions, and unforgettable moments. Known for creative compositions and attention to detail, he specializes in weddings, pre-weddings, birthdays, maternity, kids, and special celebrations. His goal is to turn every beautiful moment into a timeless memory.',
-      image: findTeamImage('NITIN BRAHMANKAR') || '',
-    },
-    {
-      id: 'team-04',
-      number: '04',
-      name: 'YASH MESHRAM',
-      role: 'Videographer',
-      description:
-        'A skilled traditional photographer and videographer specializing in capturing every important moment with clarity and creativity. With a strong focus on weddings, ceremonies, birthdays, and celebrations, he ensures that every tradition, emotion, and memorable moment is beautifully documented for you to cherish forever.',
-      image: findTeamImage('YASH MESHRAM') || '',
-    },
-    {
-      id: 'team-05',
-      number: '05',
-      name: 'SAMYAK MESHRAM',
-      role: 'Videographer',
-      description:
-        'Samyak is a talented member of the SAN Photography team, contributing creativity and expertise to every project. He specializes in cinematography and works closely with clients to ensure every important moment is captured beautifully.',
-      image: findTeamImage('SAMAYK MESHRAM') || findTeamImage('SAMYAK MESHRAM') || '',
-    },
-    {
-      id: 'team-06',
-      number: '06',
-      name: 'SARANG KANHERKAR',
-      role: 'Photographer',
-      description:
-        'Sarang is a talented traditional photographer who specializes in capturing weddings, ceremonies, celebrations, and meaningful moments. With a keen eye for detail, he beautifully documents every important tradition and emotion, creating timeless memories for every client.',
-      image: findTeamImage('SARANG KANERKAR') || findTeamImage('SARANG KANHERKAR') || '',
-    },
-    {
-      id: 'team-07',
-      number: '07',
-      name: 'GURUSH MOHARKAR',
-      role: 'Photographer',
-      description:
-        'A skilled traditional photographer and videographer specializing in capturing every important moment with clarity and creativity. With a strong focus on weddings, ceremonies, birthdays, and celebrations, he ensures that every tradition, emotion, and memorable moment is beautifully documented for you to cherish forever.',
-      image: findTeamImage('GURUSH MOHARKAR') || '',
-    },
-  ],
+  teamMembers: [],
 }
 
 /* =========================================================
@@ -273,7 +209,7 @@ function About() {
             teamHeadingItalic: remote.teamHeadingItalic ?? DEFAULT_ABOUT.teamHeadingItalic,
             teamMembers: Array.isArray(remote.teamMembers)
               ? remote.teamMembers
-              : DEFAULT_ABOUT.teamMembers,
+              : [],
           })
         }
       } catch (err) {
@@ -299,21 +235,10 @@ function About() {
     teamEyebrow = DEFAULT_ABOUT.teamEyebrow,
     teamHeadingNormal = DEFAULT_ABOUT.teamHeadingNormal,
     teamHeadingItalic = DEFAULT_ABOUT.teamHeadingItalic,
-    teamMembers = DEFAULT_ABOUT.teamMembers,
+    teamMembers = [],
   } = aboutData
 
-  // Inject Founder as the first item in the team array
-  const allTeamMembers = useMemo(() => {
-    const founderObj = {
-      id: 'team-founder',
-      number: '00',
-      name: founderName,
-      role: founderRole,
-      description: founderDescription,
-      image: founderImage
-    };
-    return [founderObj, ...teamMembers];
-  }, [founderName, founderRole, founderDescription, founderImage, teamMembers]);
+  const allTeamMembers = teamMembers
 
   return (
     <>

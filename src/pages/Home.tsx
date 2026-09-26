@@ -999,6 +999,16 @@ function Home() {
     }
   }, [collagePage, collagePageCount])
 
+useEffect(() => {
+  if (collagePageCount <= 1) return
+
+  const timer = window.setInterval(() => {
+    setCollagePage((previous) => (previous + 1) % collagePageCount)
+  }, 3000)
+
+  return () => window.clearInterval(timer)
+}, [collagePageCount])
+
   const nextCollagePage = useCallback(() => {
     setCollagePage(
       (previous) => (previous + 1) % collagePageCount
@@ -1016,11 +1026,12 @@ function Home() {
      COUPLES GRID (Dynamic list of couples)
   ===================================================== */
 
-  const couplesToRender = useMemo(() => {
+  const couplesToRender = useMemo<Array<Record<string, string>>>(() => {
+    if (!content) return []
     return Array.isArray(homeContent.couples?.items)
-      ? homeContent.couples.items.slice(0, 6)
+      ? homeContent.couples.items
       : []
-  }, [homeContent.couples?.items])
+  }, [content, homeContent.couples?.items])
 
   /* =====================================================
      VIDEOS TO RENDER (Dynamic list of videos - Strictly 4)
@@ -1055,6 +1066,8 @@ function Home() {
 
   const [current, setCurrent] =
     useState(0)
+  const [isHeroHovered, setIsHeroHovered] =
+    useState(false)
 
   const slideCount =
     activeSlides.length || 1
@@ -1088,6 +1101,14 @@ function Home() {
           slideCount
       )
     }, [slideCount])
+
+  useEffect(() => {
+    if (isHeroHovered || slideCount <= 1) return
+
+   const timer = window.setInterval(nextSlide, 3000)
+
+    return () => window.clearInterval(timer)
+  }, [current, isHeroHovered, nextSlide, slideCount])
 
   /* =====================================================
      SCROLL
@@ -1392,27 +1413,38 @@ function Home() {
           }}
         >
           <div className="mx-auto max-w-6xl">
-            <div className="relative w-full aspect-[9/4] overflow-hidden bg-black sm:aspect-[4/1] md:aspect-[5/1] lg:aspect-[32/15]">
-              {activeSlides.map((slide, index) => (
-                <div
-                  key={slide.id}
-                  className="absolute inset-0 h-full w-full transition-opacity duration-1000 ease-in-out"
-                  style={{
-                    opacity: index === current ? 1 : 0,
-                    zIndex: index === current ? 10 : 1,
-                  }}
-                >
-                  <img
-                    src={slide.image}
-                    alt="SAN Photography"
-                    className="h-full w-full object-cover object-center"
-                    loading={index === 0 ? 'eager' : index === 1 ? 'eager' : 'lazy'}
-                    fetchPriority={index === 0 ? 'high' : 'auto'}
-                    decoding="async"
-                  />
-                </div>
-              ))}
+            <div
+              className="relative w-full aspect-[9/4] overflow-hidden bg-black sm:aspect-[4/1] md:aspect-[5/1] lg:aspect-[32/15]"
+              onMouseEnter={() => setIsHeroHovered(true)}
+              onMouseLeave={() => setIsHeroHovered(false)}
+            >
+{activeSlides.map((slide, index) => {
+  let offset = (index - current + slideCount) % slideCount
 
+  if (offset > slideCount / 2) {
+    offset -= slideCount
+  }
+
+  return (
+    <div
+      key={slide.id}
+      className="absolute inset-0 h-full w-full transition-transform duration-700 ease-in-out"
+      style={{
+        transform: `translateX(${offset * 100}%)`,
+        zIndex: index === current ? 10 : 1,
+      }}
+    >
+      <img
+        src={slide.image}
+        alt="SAN Photography"
+        className="h-full w-full object-cover object-center"
+        loading={index === 0 ? 'eager' : index === 1 ? 'eager' : 'lazy'}
+        fetchPriority={index === 0 ? 'high' : 'auto'}
+        decoding="async"
+      />
+    </div>
+  )
+})}
               <div className="absolute inset-0 bg-black/45" />
               <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/20 to-black/65" />
 
@@ -1629,7 +1661,7 @@ function Home() {
               return (
                 <Link
                   key={couple.id || `couple-${index}`}
-                  to={`/gallery/${couple.slug}`}
+                  to="/gallery"
                   className="group cursor-pointer block"
                   style={{ textDecoration: 'none', color: 'inherit' }}
                 >

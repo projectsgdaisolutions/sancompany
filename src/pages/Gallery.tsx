@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import {
   motion,
@@ -9,6 +9,7 @@ import {
 } from "framer-motion";
 import type { GalleryCouple } from "../types";
 import { API_URL, readApiJson } from "../services/api";
+import AlbumDetail from "./AlbumDetail";
 
 const API_BASE_URL = API_URL;
 
@@ -19,13 +20,6 @@ const API_BASE_URL = API_URL;
 interface GalleryAlbum extends GalleryCouple {
   image: string;
   order?: number;
-}
-
-interface RecentGalleryPhoto {
-  id: string | number;
-  category: string;
-  title?: string;
-  imageUrl: string;
 }
 
 interface GalleryContent {
@@ -107,7 +101,7 @@ function normalizeCouples(savedCouples: unknown): GalleryAlbum[] {
 
   return savedCouples
     .map((couple: Partial<GalleryAlbum>, index: number) => ({
-      id: couple?.id ?? `couple-${Date.now()}-${index}`,
+      id: couple?.id ?? `couple-${index}`,
       slug: couple?.slug ?? "",
       name: couple?.name ?? "",
       location: couple?.location ?? "",
@@ -124,7 +118,7 @@ function normalizeRecentAlbums(savedRecent: unknown): GalleryAlbum[] {
 
   return savedRecent
     .map((album: Partial<GalleryAlbum>, index: number) => ({
-      id: album?.id ?? `recent-${Date.now()}-${index}`,
+      id: album?.id ?? `recent-${index}`,
       slug: album?.slug ?? "",
       name: album?.name ?? "",
       location: album?.location ?? "",
@@ -456,34 +450,6 @@ function AlbumCard({ album, index }: AlbumCardProps) {
   );
 }
 
-function RecentPhotoCard({ photo, index }: { photo: RecentGalleryPhoto; index: number }) {
-  const slug = photo.category.replace(/^recent:/, "");
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.1 }}
-      transition={{ duration: 0.7, ease: EASE_EXPO, delay: index * 0.05 }}
-      className="group relative"
-    >
-      <Link to={`/gallery/${slug}`} className="relative block overflow-hidden">
-        <div className="relative aspect-[5/6] overflow-hidden bg-[#f0ede5]">
-          <img
-            src={photo.imageUrl}
-            alt={photo.title || "Recent gallery photo"}
-            loading={index < 3 ? "eager" : "lazy"}
-            fetchPriority={index < 3 ? "high" : "auto"}
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover transition-all duration-[1200ms] ease-out grayscale-[15%] group-hover:scale-[1.04] group-hover:grayscale-0"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/0 to-black/0 opacity-90" />
-        </div>
-      </Link>
-    </motion.div>
-  );
-}
-
 /* =========================================================
    MAIN GALLERY
 ========================================================= */
@@ -491,11 +457,13 @@ function RecentPhotoCard({ photo, index }: { photo: RecentGalleryPhoto; index: n
 function Gallery() {
   useGoogleFonts();
 
+  const { slug } = useParams();
   const [galleryContent, setGalleryContent] = useState<GalleryContent>(DEFAULT_GALLERY);
-  const [recentPhotos, setRecentPhotos] = useState<RecentGalleryPhoto[]>([]);
   const [activeFilter, setActiveFilter] = useState<"All" | "Recent">("All");
 
   useEffect(() => {
+    if (slug) return;
+
     let isMounted = true;
 
     // Fetch Gallery metadata (couples + recentAlbums) from PHP API
@@ -516,30 +484,14 @@ function Gallery() {
 
     fetchGalleryContent();
 
-    const fetchRecentPhotos = async () => {
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/api/gallery.php?type=recentPhotos`,
-          { cache: "no-store" }
-        );
-        if (!response.ok) {
-          throw new Error(`Recent gallery request failed: ${response.status}`);
-        }
-        const data = await readApiJson(response, "Recent gallery photos");
-        if (isMounted && data.success && Array.isArray(data.recentPhotos)) {
-          setRecentPhotos(data.recentPhotos);
-        }
-      } catch (error) {
-        console.error("Failed to fetch recent gallery photos:", error);
-      }
-    };
-
-    fetchRecentPhotos();
-
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [slug]);
+
+  if (slug) {
+    return <AlbumDetail />;
+  }
 
   const {
     heroEyebrow,
@@ -688,13 +640,13 @@ function Gallery() {
         <section className="relative px-8 pb-16 sm:px-12 lg:px-24 lg:pb-20">
           <div className="mx-auto max-w-5xl">
             {activeFilter === "Recent" ? (
-              /* RECENT TAB: Every Recent photo returned by the API */
+              /* RECENT TAB: Persisted recent album cards */
               <div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-4 lg:gap-x-5 lg:gap-y-8">
-                {recentPhotos.length > 0 ? (
-                  recentPhotos.map((photo, index) => (
-                    <RecentPhotoCard
-                      key={photo.id}
-                      photo={photo}
+                {publicRecentAlbums.length > 0 ? (
+                  publicRecentAlbums.map((album, index) => (
+                    <AlbumCard
+                      key={album.id ?? `${album.slug}-${index}`}
+                      album={album}
                       index={index}
                     />
                   ))

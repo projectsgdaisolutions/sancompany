@@ -334,6 +334,24 @@ function SmartImage({ src, alt, className = '', onClick }: SmartImageProps) {
   )
 }
 
+interface CleanVideoReelProps {
+  src: string;
+  className?: string;
+}
+
+function CleanVideoReel({ src, className = '' }: CleanVideoReelProps) {
+  return (
+    <video
+      src={src}
+      muted
+      loop
+      playsInline
+      autoPlay
+      className={`object-cover ${className}`}
+    />
+  )
+}
+
 /* =========================================================
    STORY EDITORIAL SECTION
 ========================================================= */

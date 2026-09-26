@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -21,7 +22,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { uploadToCloudinary } from "../services/cloudinary";
+import { uploadToCloudinary, type CloudinaryUploadResult } from "../services/cloudinary";
 import type { GalleryCouple, GalleryPhoto } from "../types";
 import { API_URL } from "../services/api";
 
@@ -56,6 +57,22 @@ interface AdminGalleryPhoto extends GalleryPhoto {
   title?: string;
 }
 
+type QueuedPhotoStatus = "queued" | "uploading" | "saving" | "failed" | "uploaded";
+
+interface QueuedPhoto {
+  id: string;
+  file: File;
+  status: QueuedPhotoStatus;
+  progress: number;
+  error?: string;
+  media?: CloudinaryUploadResult;
+}
+
+interface RejectedPhoto {
+  fileName: string;
+  message: string;
+}
+
 type GallerySection = "couples" | "recentAlbums";
 
 interface GalleryApiResponse {
@@ -74,7 +91,41 @@ const API_BASE_URL = API_URL;
 const MAX_CARDS = 16;
 const MAX_COUPLES_CARDS = 12;
 const MAX_RECENT_CARDS = 4;
-const MAX_PHOTOS = 50;
+const MAX_PHOTOS = 500;
+const MAX_IMAGE_SIZE = 25 * 1024 * 1024;
+const MAX_CONCURRENT_PHOTO_UPLOADS = 3;
+const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ALLOWED_PHOTO_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
+
+function getPhotoFileError(file: File): string | null {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  const expectedType = extension === "jpg" || extension === "jpeg"
+    ? "image/jpeg"
+    : extension === "png"
+      ? "image/png"
+      : extension === "webp"
+        ? "image/webp"
+        : "";
+
+  if (!ALLOWED_PHOTO_EXTENSIONS.has(extension) || !ALLOWED_PHOTO_TYPES.has(file.type) || file.type !== expectedType) {
+    return "Invalid image type. Use JPG, JPEG, PNG, or WEBP.";
+  }
+  if (file.size <= 0) return "The file is empty.";
+  if (file.size > MAX_IMAGE_SIZE) return "File size exceeds the 25 MiB limit.";
+  return null;
+}
+
+function QueuedPhotoPreview({ file }: { file: File }) {
+  const [previewUrl, setPreviewUrl] = useState("");
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return previewUrl ? <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" /> : null;
+}
 
 const DEFAULT_COUPLES: GalleryAdminAlbum[] = [
   {
@@ -243,6 +294,9 @@ export default function GalleryManagement() {
     useState("");
 
   const [uploadingState, setUploadingState] = useState<Record<string, boolean>>({});
+  const [photoQueues, setPhotoQueues] = useState<Record<string, QueuedPhoto[]>>({});
+  const [rejectedPhotos, setRejectedPhotos] = useState<Record<string, RejectedPhoto[]>>({});
+  const activePhotoQueueKeysRef = useRef(new Set<string>());
 
   /* =========================================================
      ADD ALBUM STATE
@@ -1103,240 +1157,213 @@ export default function GalleryManagement() {
      UPLOAD ALBUM PHOTOS
   ========================================================= */
 
-  const handleUploadAlbumPhotos = async (
+  const queueAlbumPhotos = (
     section: GallerySection,
     slug: string,
     fileList: FileList | null
   ) => {
-    if (
-      !fileList ||
-      fileList.length === 0
-    ) {
+    if (!fileList?.length) return;
+
+    const key = `photos-${section}-${slug}`;
+    const currentPhotos = section === "recentAlbums"
+      ? recentAlbumPhotos[slug] || []
+      : albumPhotos[slug] || [];
+    const existingQueue = photoQueues[key] || [];
+    const pendingCount = existingQueue.filter((photo) => photo.status !== "uploaded").length;
+    const available = Math.max(0, MAX_PHOTOS - currentPhotos.length - pendingCount);
+    const seenFiles = new Set<File>(existingQueue.map((photo) => photo.file));
+    const queuedFiles: File[] = [];
+    const rejected: RejectedPhoto[] = [];
+
+    for (const file of Array.from(fileList)) {
+      const validationError = getPhotoFileError(file);
+      if (validationError) {
+        rejected.push({ fileName: file.name, message: validationError });
+      } else if (seenFiles.has(file)) {
+        rejected.push({ fileName: file.name, message: "This file is already selected in this batch." });
+      } else if (queuedFiles.length >= available) {
+        rejected.push({ fileName: file.name, message: `Album capacity is ${MAX_PHOTOS} photos; no upload slots remain.` });
+      } else {
+        seenFiles.add(file);
+        queuedFiles.push(file);
+      }
+    }
+
+    setRejectedPhotos((prev) => ({ ...prev, [key]: [...(prev[key] || []), ...rejected] }));
+    if (queuedFiles.length) {
+      const newItems = queuedFiles.map((file): QueuedPhoto => ({
+        id: crypto.randomUUID(),
+        file,
+        status: "queued",
+        progress: 0,
+      }));
+      setPhotoQueues((prev) => ({ ...prev, [key]: [...(prev[key] || []), ...newItems] }));
+    }
+  };
+
+  const removeQueuedPhoto = (key: string, photoId: string) => {
+    setPhotoQueues((prev) => ({
+      ...prev,
+      [key]: (prev[key] || []).filter((photo) => photo.id !== photoId),
+    }));
+  };
+
+  const clearPhotoQueue = (key: string) => {
+    if (activePhotoQueueKeysRef.current.has(key)) return;
+    setPhotoQueues((prev) => ({ ...prev, [key]: [] }));
+    setRejectedPhotos((prev) => ({ ...prev, [key]: [] }));
+  };
+
+  const handleUploadAlbumPhotos = async (
+    section: GallerySection,
+    slug: string,
+    retryFailed = false
+  ) => {
+    const key = `photos-${section}-${slug}`;
+    if (activePhotoQueueKeysRef.current.has(key)) return;
+
+    const queue = photoQueues[key] || [];
+    const candidates = queue.filter((photo) => retryFailed
+      ? photo.status === "failed"
+      : photo.status === "queued");
+    if (!candidates.length) return;
+
+    const currentPhotos = section === "recentAlbums"
+      ? recentAlbumPhotos[slug] || []
+      : albumPhotos[slug] || [];
+    const remaining = Math.max(0, MAX_PHOTOS - currentPhotos.length);
+    if (candidates.length > remaining) {
+      setErrMsg(`This album has room for only ${remaining} more photos.`);
       return;
     }
 
-    const isRecent =
-      section ===
-      "recentAlbums";
+    activePhotoQueueKeysRef.current.add(key);
+    setUploadingState((prev) => ({ ...prev, [key]: true }));
+    setErrMsg("");
 
-    const currentPhotos =
-      isRecent
-        ? recentAlbumPhotos[slug] || []
-        : albumPhotos[slug] || [];
+    const isRecent = section === "recentAlbums";
+    const category = `${isRecent ? "recent" : "gallery"}:${slug}`;
+    const folder = `san-photography/gallery/${isRecent ? "recent" : slug}`;
+    const uploadedMedia = new Map<string, CloudinaryUploadResult>();
+    let nextIndex = 0;
 
-    const currentCount =
-      currentPhotos.length;
+    const updateQueueItem = (photoId: string, changes: Partial<QueuedPhoto>) => {
+      setPhotoQueues((prev) => ({
+        ...prev,
+        [key]: (prev[key] || []).map((photo) => photo.id === photoId ? { ...photo, ...changes } : photo),
+      }));
+    };
 
-    const remaining =
-      MAX_PHOTOS -
-      currentCount;
-
-    if (remaining <= 0) {
-      alert(
-        `This album already has ${MAX_PHOTOS}/${MAX_PHOTOS} photos. Delete a photo before uploading another.`
-      );
-      return;
-    }
-
-    const selectedFiles: File[] = Array.from(fileList);
-
-    if (
-      selectedFiles.length >
-      remaining
-    ) {
-      alert(
-        `This album already has ${currentCount}/${MAX_PHOTOS} photos.\n\nYou selected ${selectedFiles.length} photos, but only ${remaining} slot${
-          remaining === 1
-            ? ""
-            : "s"
-        } remaining.\n\nOnly ${remaining} photo${
-          remaining === 1
-            ? ""
-            : "s"
-        } will be uploaded.`
-      );
-    }
-
-    const filesToUpload =
-      selectedFiles.slice(
-        0,
-        remaining
-      );
-
-    const key =
-      `photos-${section}-${slug}`;
-
-    const categoryPrefix =
-      isRecent
-        ? "recent"
-        : "gallery";
-
-    const category =
-      `${categoryPrefix}:${slug}`;
-
-    const folder =
-      `san-photography/gallery/${isRecent ? "recent" : slug}`;
+    const uploadWorker = async () => {
+      while (nextIndex < candidates.length) {
+        const photo = candidates[nextIndex++];
+        updateQueueItem(photo.id, {
+          status: photo.media ? "saving" : "uploading",
+          progress: photo.media ? 100 : 0,
+          error: undefined,
+        });
+        try {
+          const media = photo.media || await uploadToCloudinary(
+            photo.file,
+            folder,
+            (progress) => updateQueueItem(photo.id, { progress })
+          );
+          if (!media?.url) throw new Error("The media service did not return an image URL.");
+          uploadedMedia.set(photo.id, media);
+          updateQueueItem(photo.id, { status: "saving", progress: 100, media, error: undefined });
+        } catch (error: unknown) {
+          updateQueueItem(photo.id, {
+            status: "failed",
+            error: error instanceof Error ? error.message : "Upload failed.",
+          });
+        }
+      }
+    };
 
     try {
-      setUploadingState(
-        (prev) => ({
-          ...prev,
-          [key]: true,
-        })
-      );
+      await Promise.all(Array.from(
+        { length: Math.min(MAX_CONCURRENT_PHOTO_UPLOADS, candidates.length) },
+        () => uploadWorker()
+      ));
 
-      setErrMsg("");
+      const mediaCandidates = candidates
+        .map((photo) => ({ photo, media: uploadedMedia.get(photo.id) || photo.media }))
+        .filter((entry): entry is { photo: QueuedPhoto; media: CloudinaryUploadResult } => Boolean(entry.media));
+      if (!mediaCandidates.length) return;
 
-      const itemsToInsert = [];
-
-      /*
-       * Sequential Cloudinary upload.
-       * Prevents browser/network overload.
-       */
-
-      for (
-        let i = 0;
-        i < filesToUpload.length;
-        i++
-      ) {
-        const file =
-          filesToUpload[i];
-
-        try {
-          const result =
-            await uploadToCloudinary(
-              file,
-              folder
-            );
-
-          if (!result?.url) {
-            throw new Error(
-              `Cloudinary upload failed for ${file.name}`
-            );
-          }
-
-          itemsToInsert.push({
-            category,
-
-            title:
-              getFileTitle(file),
-
-            imageUrl:
-              result.url,
-
-            publicId:
-              result.publicId || "",
-
-            resourceType:
-              result.resourceType ||
-              "image",
-
-            format:
-              result.format || "",
-
-            width:
-              result.width || null,
-
-            height:
-              result.height || null,
-
-            bytes:
-              result.bytes || null,
-
-            folder,
-
-            order:
-              currentCount +
-              itemsToInsert.length,
-
-            isActive: true,
-          });
-        } catch (uploadError: unknown) {
-          console.error(
-            `Failed uploading ${file.name}:`,
-            uploadError
-          );
-
-          throw new Error(
-            `Failed to upload "${file.name}". ${uploadError instanceof Error ? uploadError.message : "Unknown upload error"}`
-          );
+      const retryCandidates = mediaCandidates.filter(({ photo }) => Boolean(photo.media));
+      const existingKeys = new Set<string>();
+      if (retryCandidates.length) {
+        const existingResponse = await fetch(
+          `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(slug)}&section=${encodeURIComponent(section)}&include_inactive=1`,
+          { headers: authenticatedHeaders() }
+        );
+        const existingData = await parseApiResponse(existingResponse);
+        if (!existingResponse.ok || !existingData.success) {
+          throw new Error(existingData.message || "Could not verify saved photos before retrying.");
+        }
+        for (const existingPhoto of Array.isArray(existingData.photos) ? existingData.photos : []) {
+          if (existingPhoto.publicId) existingKeys.add(`id:${existingPhoto.publicId}`);
+          if (existingPhoto.imageUrl) existingKeys.add(`url:${existingPhoto.imageUrl}`);
         }
       }
 
-      if (
-        itemsToInsert.length ===
-        0
-      ) {
-        return;
-      }
+      const toSave = mediaCandidates.filter(({ photo, media }) => {
+        const alreadySaved = Boolean(
+          (media.publicId && existingKeys.has(`id:${media.publicId}`)) ||
+          (media.url && existingKeys.has(`url:${media.url}`))
+        );
+        if (alreadySaved) {
+          updateQueueItem(photo.id, { status: "uploaded", progress: 100, error: undefined });
+        }
+        return !alreadySaved;
+      });
 
-      /*
-       * Save uploaded media to MySQL.
-       */
+      if (toSave.length) {
+        const items = toSave.map(({ photo, media }, index) => ({
+          category,
+          title: getFileTitle(photo.file),
+          imageUrl: media.url,
+          publicId: media.publicId || "",
+          resourceType: media.resourceType || "image",
+          format: media.format || "",
+          width: media.width || null,
+          height: media.height || null,
+          bytes: media.bytes || null,
+          folder,
+          order: currentPhotos.length + index,
+          isActive: true,
+        }));
 
-      const response =
-        await fetch(
-          `${API_BASE_URL}/api/gallery.php`,
-          {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/gallery.php`, {
             method: "POST",
-            headers:
-              authenticatedJsonHeaders(),
-
-            body: JSON.stringify({
-              items:
-                itemsToInsert,
-            }),
+            headers: authenticatedJsonHeaders(),
+            body: JSON.stringify({ items }),
+          });
+          const data = await parseApiResponse(response);
+          if (!response.ok || !data.success) {
+            throw new Error(data.message || "Uploaded images could not be saved to the album.");
           }
-        );
-
-      const data =
-        await parseApiResponse(
-          response
-        );
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.message ||
-            "Photos uploaded to Cloudinary but could not be saved in MySQL."
-        );
+          toSave.forEach(({ photo }) => updateQueueItem(photo.id, { status: "uploaded", progress: 100, error: undefined }));
+          setSaveMsg(`${toSave.length} photo${toSave.length === 1 ? "" : "s"} added successfully.`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Failed to save uploaded photos.";
+          toSave.forEach(({ photo, media }) => updateQueueItem(photo.id, { status: "failed", media, error: message }));
+        }
       }
 
-      /*
-       * Reload from MySQL.
-       */
-
-      await fetchAlbumPhotos(
-        slug,
-        section
-      );
-
-      setSaveMsg(
-        `${itemsToInsert.length} photo${
-          itemsToInsert.length ===
-          1
-            ? ""
-            : "s"
-        } added successfully.`
-      );
+      await fetchAlbumPhotos(slug, section);
     } catch (error: unknown) {
-      console.error(
-        "Album photo upload error:",
-        error
-      );
-
-      setErrMsg(
-        error instanceof Error ? error.message : "Failed to upload album photos."
-      );
+      const message = error instanceof Error ? error.message : "Failed to verify or save album photos.";
+      candidates.forEach((photo) => {
+        const media = uploadedMedia.get(photo.id) || photo.media;
+        if (media) updateQueueItem(photo.id, { status: "failed", media, error: message });
+      });
+      setErrMsg(message);
     } finally {
-      setUploadingState(
-        (prev) => ({
-          ...prev,
-          [key]: false,
-        })
-      );
+      activePhotoQueueKeysRef.current.delete(key);
+      setUploadingState((prev) => ({ ...prev, [key]: false }));
     }
   };
 
@@ -1489,7 +1516,8 @@ export default function GalleryManagement() {
       section: GallerySection,
       slug: string,
       photoIndex: number,
-      direction: number
+      direction: number,
+      dropTarget?: number
     ) => {
       const isRecent =
         section ===
@@ -1504,9 +1532,7 @@ export default function GalleryManagement() {
               slug
             ] || [];
 
-      const target =
-        photoIndex +
-        direction;
+      const target = dropTarget ?? photoIndex + direction;
 
       if (
         target < 0 ||
@@ -1515,18 +1541,11 @@ export default function GalleryManagement() {
         return;
       }
 
-      const copy = [
-        ...list,
-      ];
+      if (target === photoIndex) return;
 
-      const temp =
-        copy[photoIndex];
-
-      copy[photoIndex] =
-        copy[target];
-
-      copy[target] =
-        temp;
+      const copy = [...list];
+      const [movedPhoto] = copy.splice(photoIndex, 1);
+      copy.splice(target, 0, movedPhoto);
 
       const reordered =
         copy.map(
@@ -1627,6 +1646,17 @@ export default function GalleryManagement() {
     ) => {
       if (!file) return;
 
+      const validationError = getPhotoFileError(file);
+      if (validationError) {
+        setErrMsg(`${file.name}: ${validationError}`);
+        return;
+      }
+
+      const replacementKey = `replace-${photoId}`;
+      if (activePhotoQueueKeysRef.current.has(replacementKey)) return;
+      activePhotoQueueKeysRef.current.add(replacementKey);
+      setUploadingState((prev) => ({ ...prev, [replacementKey]: true }));
+
       const isRecent =
         section ===
         "recentAlbums";
@@ -1724,6 +1754,9 @@ export default function GalleryManagement() {
         setErrMsg(
           error instanceof Error ? error.message : "Failed to replace photo."
         );
+      } finally {
+        activePhotoQueueKeysRef.current.delete(replacementKey);
+        setUploadingState((prev) => ({ ...prev, [replacementKey]: false }));
       }
     };
 
@@ -2157,6 +2190,18 @@ export default function GalleryManagement() {
       uploadingState[
         uploadKey
       ];
+    const queuedPhotos = photoQueues[uploadKey] || [];
+    const rejectedFiles = rejectedPhotos[uploadKey] || [];
+    const queuedCount = queuedPhotos.filter((photo) => photo.status === "queued").length;
+    const failedCount = queuedPhotos.filter((photo) => photo.status === "failed").length;
+    const uploadedCount = queuedPhotos.filter((photo) => photo.status === "uploaded").length;
+    const processedCount = uploadedCount + failedCount;
+    const queueProgress = queuedPhotos.length
+      ? Math.round(queuedPhotos.reduce(
+          (total, photo) => total + (photo.status === "uploaded" || photo.status === "failed" ? 100 : photo.progress),
+          0
+        ) / queuedPhotos.length)
+      : 0;
 
     return (
       <div className="border-t border-neutral-200 bg-[#f7f5f0] p-5">
@@ -2199,55 +2244,121 @@ export default function GalleryManagement() {
                 <span>Delete All Photos</span>
               </button>
             )}
-
-            <label
-              className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-medium uppercase tracking-[0.15em] shadow-sm ${
-                remaining <= 0
-                  ? "bg-neutral-300 text-neutral-500 cursor-not-allowed"
-                  : isUploading
-                  ? "bg-neutral-400 text-white cursor-wait"
-                  : "bg-[#9b7740] hover:bg-[#856535] text-white cursor-pointer"
-              }`}
-            >
-              {isUploading ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Upload className="w-3.5 h-3.5" />
-              )}
-
-              <span>
-                {isUploading
-                  ? "Uploading..."
-                  : remaining <= 0
-                  ? "Album Full"
-                  : "Add Photos"}
-              </span>
-
-              {remaining > 0 &&
-                !isUploading && (
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    disabled={
-                      isUploading
-                    }
-                    onChange={(e) => {
-                      handleUploadAlbumPhotos(
-                        section,
-                        slug,
-                        e.target.files
-                      );
-
-                      e.target.value =
-                        "";
-                    }}
-                  />
-                )}
-            </label>
           </div>
         </div>
+
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            queueAlbumPhotos(section, slug, event.dataTransfer.files);
+          }}
+          className="mb-5 flex flex-col items-center justify-between gap-4 rounded-lg border-2 border-dashed border-[#cfc5b4] bg-white/70 px-4 py-5 text-center sm:flex-row sm:text-left"
+        >
+          <div>
+            <h5 className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-700">
+              Add Photos to {name}
+            </h5>
+            <p className="mt-1 text-[11px] text-neutral-500">Drag and drop multiple photos here, or choose files.</p>
+            <p className="mt-1 text-[10px] text-neutral-400">JPG, JPEG, PNG, WEBP · up to 25 MiB per image · maximum {MAX_PHOTOS} photos per album</p>
+          </div>
+          <label className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-4 py-2.5 text-xs font-medium uppercase tracking-[0.15em] text-white shadow-sm ${remaining <= 0 || isUploading ? "cursor-not-allowed bg-neutral-400" : "bg-[#9b7740] hover:bg-[#856535]"}`}>
+            <Plus className="h-3.5 w-3.5" />
+            <span>{remaining <= 0 ? "Album Full" : "Add Photos"}</span>
+            {remaining > 0 && !isUploading && (
+              <input
+                type="file"
+                multiple
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  queueAlbumPhotos(section, slug, event.target.files);
+                  event.target.value = "";
+                }}
+              />
+            )}
+          </label>
+        </div>
+
+        {(queuedPhotos.length > 0 || rejectedFiles.length > 0) && (
+          <div className="mb-5 rounded-lg border border-neutral-200 bg-white p-3 sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-700">
+                  {isUploading ? `Uploading ${processedCount} / ${queuedPhotos.length}` : `${queuedPhotos.length} photos selected`}
+                </p>
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  {queuedCount} ready · {uploadedCount} uploaded · {failedCount} failed
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {failedCount > 0 && (
+                  <button type="button" onClick={() => handleUploadAlbumPhotos(section, slug, true)} disabled={isUploading} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-amber-800 disabled:opacity-50">
+                    Retry Failed ({failedCount})
+                  </button>
+                )}
+                {queuedCount > 0 && (
+                  <button type="button" onClick={() => handleUploadAlbumPhotos(section, slug)} disabled={isUploading} className="rounded bg-black px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white disabled:opacity-50">
+                    Upload {queuedCount} Photos
+                  </button>
+                )}
+                <button type="button" onClick={() => clearPhotoQueue(uploadKey)} disabled={isUploading} className="rounded border border-neutral-200 bg-white px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-600 disabled:opacity-50">
+                  Clear All
+                </button>
+              </div>
+            </div>
+
+            {isUploading && (
+              <div className="mt-3" aria-live="polite">
+                <div className="mb-1 flex justify-between text-[10px] text-neutral-500">
+                  <span>{processedCount} / {queuedPhotos.length} processed</span><span>{queueProgress}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200">
+                  <div className="h-full bg-[#9b7740] transition-all" style={{ width: `${queueProgress}%` }} />
+                </div>
+              </div>
+            )}
+
+            {rejectedFiles.length > 0 && (
+              <div className="mt-3 space-y-1 rounded border border-red-100 bg-red-50 p-2">
+                {rejectedFiles.map((file, index) => (
+                  <p key={`${file.fileName}-${index}`} className="break-all text-[10px] text-red-700">
+                    <span className="font-semibold">{file.fileName}</span>: {file.message}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {queuedPhotos.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {queuedPhotos.map((photo) => (
+                  <div key={photo.id} className="flex min-w-0 gap-2 rounded border border-neutral-200 bg-[#fbfaf7] p-2">
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-neutral-100">
+                      <QueuedPhotoPreview file={photo.file} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[10px] font-medium text-neutral-700" title={photo.file.name}>{photo.file.name}</p>
+                      <p className={`mt-0.5 text-[9px] font-semibold uppercase ${photo.status === "failed" ? "text-red-600" : photo.status === "uploaded" ? "text-emerald-700" : "text-neutral-500"}`}>
+                        {photo.status === "queued" ? "Ready" : photo.status === "uploading" ? `Uploading ${photo.progress}%` : photo.status === "saving" ? "Saving" : photo.status === "uploaded" ? "Uploaded" : "Failed"}
+                      </p>
+                      {photo.error && <p className="mt-0.5 line-clamp-2 text-[9px] text-red-600">{photo.error}</p>}
+                      {(photo.status === "uploading" || photo.status === "saving") && (
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-neutral-200">
+                          <div className="h-full bg-[#9b7740] transition-all" style={{ width: `${photo.progress}%` }} />
+                        </div>
+                      )}
+                    </div>
+                    {!isUploading && photo.status !== "uploaded" && (
+                      <button type="button" onClick={() => removeQueuedPhoto(uploadKey, photo.id)} aria-label={`Remove ${photo.file.name} from upload list`} className="self-start rounded p-1 text-neutral-400 transition hover:bg-red-50 hover:text-red-600">
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ---------------------------------------------------
             CAPACITY
@@ -2318,7 +2429,21 @@ export default function GalleryManagement() {
                   key={
                     photo.id
                   }
-                  className="group relative bg-white rounded border border-neutral-200 overflow-hidden shadow-xs"
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("text/plain", photo.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const draggedPhotoId = event.dataTransfer.getData("text/plain");
+                    const draggedPhotoIndex = photos.findIndex((item) => item.id === draggedPhotoId);
+                    if (draggedPhotoIndex >= 0) {
+                      handleMoveAlbumPhoto(section, slug, draggedPhotoIndex, 0, photoIndex);
+                    }
+                  }}
+                  className="group relative cursor-grab touch-pan-y bg-white rounded border border-neutral-200 overflow-hidden shadow-xs active:cursor-grabbing"
                 >
 
                   <div className="aspect-square bg-neutral-100 overflow-hidden">
@@ -2418,7 +2543,7 @@ export default function GalleryManagement() {
 
                         <input
                           type="file"
-                          accept="image/*"
+                          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                           className="hidden"
                           onChange={(
                             e

@@ -6,12 +6,8 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
-  Layers,
-  RefreshCw,
-  Trash2,
   Upload,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 
 import { uploadToCloudinary } from '../services/cloudinary';
 import { API_URL, buildApiUrl, readApiJson } from '../services/api';
@@ -86,7 +82,11 @@ const defaultCollageImages = Object.values(portfolioFiles)
 
 type HomeSlide = { id: string; title: string; image: string };
 type HomeCollageImage = { url: string; visible: boolean };
-type HomeCoupleItem = { id: string; slug: string; name: string; img: string };
+type HomeCoupleItem = {
+  id: string;
+  name: string;
+  img: string;
+};
 type HomeVideoItem = { id: string; title: string; url: string };
 type HomeTestimonialItem = { id: string; quote: string; author: string };
 
@@ -134,15 +134,6 @@ type HomeContent = {
 
 type HomeSectionField = keyof HomeContent;
 
-type CouplePhotoRecord = Array<{
-  id: string | number;
-  title?: string;
-  imageUrl: string;
-  isActive?: boolean;
-  order?: number;
-  [key: string]: unknown;
-}>;
-
 const defaultHeroSlides: HomeSlide[] = [
   { id: 'hero-1', title: 'Slide 01', image: '' },
   { id: 'hero-2', title: 'Slide 02', image: '' },
@@ -183,12 +174,12 @@ const buildInitialHomeContent = (): HomeContent => ({
     heading: 'Real love',
     italicHeading: 'stories.',
     items: [
-      { id: 'couple-0', slug: 'kapil-payal', name: 'Kapil & Payal', img: image01 },
-      { id: 'couple-1', slug: 'pratik-megha', name: 'Pratik & Megha', img: image04 },
-      { id: 'couple-2', slug: 'tanmay-achal', name: 'Tanmay & Achal', img: image07 },
-      { id: 'couple-3', slug: 'rohan-anjali', name: 'Rohan & Anjali', img: '' },
-      { id: 'couple-4', slug: 'story-05', name: 'Story 05', img: '' },
-      { id: 'couple-5', slug: 'story-06', name: 'Story 06', img: '' },
+      { id: 'couple-0', name: 'Kapil & Payal', img: image01 },
+      { id: 'couple-1', name: 'Pratik & Megha', img: image04 },
+      { id: 'couple-2', name: 'Tanmay & Achal', img: image07 },
+      { id: 'couple-3', name: 'Rohan & Anjali', img: '' },
+      { id: 'couple-4', name: 'Story 05', img: '' },
+      { id: 'couple-5', name: 'Story 06', img: '' },
     ],
   },
 
@@ -241,16 +232,7 @@ const deepClone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
-const MAX_COUPLE_PHOTOS = 40;
 const MAX_COUPLES = 6;
-const ALLOWED_COUPLE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const slugify = (value: string | number | null | undefined): string =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-
 const normalizeCollageImages = (images: Array<string | { url?: string; image?: string; visible?: boolean }>): HomeCollageImage[] =>
   images.map((image) =>
     typeof image === 'string'
@@ -263,27 +245,16 @@ const normalizeCollageImages = (images: Array<string | { url?: string; image?: s
   );
 
 function normalizeCoupleStories(savedItems: unknown, fallback: HomeCoupleItem[]): HomeCoupleItem[] {
-  return Array.isArray(savedItems) ? (savedItems as HomeCoupleItem[]) : fallback;
-}
+  if (!Array.isArray(savedItems)) return fallback;
 
-function BulkFilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
-
-  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
-
-  return (
-    <div className="group relative aspect-square overflow-hidden rounded border border-neutral-200">
-      <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
-      <button
-        type="button"
-        onClick={onRemove}
-        className="absolute right-1 top-1 rounded bg-black/70 p-1 text-white"
-        title="Remove selected file"
-      >
-        <Trash2 size={11} />
-      </button>
-    </div>
-  );
+  return savedItems.map((savedItem) => {
+    const homeItem = savedItem as Record<string, unknown>;
+    return {
+      id: String(homeItem.id ?? ''),
+      name: String(homeItem.name ?? ''),
+      img: String(homeItem.img ?? ''),
+    };
+  });
 }
 
 /* =========================================================
@@ -889,14 +860,6 @@ const HomePageManagement = () => {
   const [saveMsg, setSaveMsg] = useState('');
   const [errMsg, setErrMsg] = useState('');
   const [collageCollapsed, setCollageCollapsed] = useState(true);
-  const [expandedCoupleSlug, setExpandedCoupleSlug] = useState<string | null>(null);
-  const [couplePhotos, setCouplePhotos] = useState<Record<string, CouplePhotoRecord>>({});
-  const [coupleLoading, setCoupleLoading] = useState<Record<string, boolean>>({});
-  const [bulkOpen, setBulkOpen] = useState<Record<string, boolean>>({});
-  const [bulkFiles, setBulkFiles] = useState<Record<string, File[]>>({});
-  const [coupleUploading, setCoupleUploading] = useState<Record<string, { active: boolean; uploaded: number; failed: number }>>({});
-  const bulkInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
   // Drag and Drop tracking states for each repeatable section
   const [draggedSlideIdx, setDraggedSlideIdx] = useState<number | null>(null);
   const [dragOverSlideIdx, setDragOverSlideIdx] = useState<number | null>(null);
@@ -1122,7 +1085,6 @@ const HomePageManagement = () => {
             ...items,
             {
               id: `couple-${Date.now()}`,
-              slug: `couple-${Date.now()}`,
               name: '',
               img: '',
             },
@@ -1194,253 +1156,6 @@ const HomePageManagement = () => {
     setDraggedCoupleIdx(null);
     setDragOverCoupleIdx(null);
     setSaveMsg('');
-  };
-
-  const galleryHeaders = (json = false) => ({
-    Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}`,
-    ...(json ? { 'Content-Type': 'application/json' } : {}),
-  });
-
-  const getCoupleSlug = (item: HomeCoupleItem) => item.slug || slugify(item.name);
-
-  const fetchCouplePhotos = async (slug: string) => {
-    if (!slug) return;
-    setCoupleLoading((prev) => ({ ...prev, [slug]: true }));
-    try {
-      const response = await fetch(
-        `${buildApiUrl(API_BASE_URL, 'api/gallery.php')}?slug=${encodeURIComponent(slug)}&include_inactive=1`,
-        { headers: galleryHeaders() }
-      );
-      const data = await readApiJson(response, 'Gallery media');
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to load story photos.');
-      }
-      setCouplePhotos((prev) => ({ ...prev, [slug]: data.photos || [] }));
-    } catch (error: unknown) {
-      setErrMsg(getErrorMessage(error, 'Failed to load story photos.'));
-    } finally {
-      setCoupleLoading((prev) => ({ ...prev, [slug]: false }));
-    }
-  };
-
-  const toggleCoupleManager = async (slug: string) => {
-    if (expandedCoupleSlug === slug) {
-      setExpandedCoupleSlug(null);
-      return;
-    }
-    setExpandedCoupleSlug(slug);
-    await fetchCouplePhotos(slug);
-  };
-
-  // Load album data once after Home content is loaded so every row
-  // shows its actual photo count without requiring the manager to be opened.
-  const coupleCountsLoadedRef = useRef(false);
-
-  useEffect(() => {
-    if (loading || coupleCountsLoadedRef.current) return;
-
-    const items = content.couples?.items || [];
-    if (!items.length) return;
-
-    coupleCountsLoadedRef.current = true;
-
-    Promise.all(
-      items.map((item) => {
-        const slug = getCoupleSlug(item);
-        return fetchCouplePhotos(slug);
-      })
-    ).catch((error) => {
-      console.error('Failed to load couple photo counts:', error);
-    });
-  }, [loading, content.couples?.items]);
-
-  const selectCoupleFiles = (slug: string, fileList: FileList | null) => {
-    const currentCount = couplePhotos[slug]?.length || 0;
-    const files = Array.from(fileList || []);
-      
-    if (files.some((file) => !ALLOWED_COUPLE_IMAGE_TYPES.includes(file.type))) {
-      setErrMsg('Only JPG, JPEG, PNG, and WEBP images are supported.');
-    }
-
-    const validFiles = files.filter((file) => ALLOWED_COUPLE_IMAGE_TYPES.includes(file.type));
-    const available = Math.max(0, MAX_COUPLE_PHOTOS - currentCount);
-    if (validFiles.length > available) {
-      setErrMsg(`Maximum ${MAX_COUPLE_PHOTOS} photos allowed for this story. Only ${available} slot(s) remain.`);
-    }
-    setBulkFiles((prev) => ({ ...prev, [slug]: validFiles.slice(0, available) }));
-  };
-
-  const uploadCouplePhotos = async (slug: string) => {
-    const files = bulkFiles[slug] || [];
-    if (!files.length) return;
-
-    const currentCount = couplePhotos[slug]?.length || 0;
-    if (currentCount + files.length > MAX_COUPLE_PHOTOS) {
-      setErrMsg(`Maximum ${MAX_COUPLE_PHOTOS} photos allowed for this story.`);
-      return;
-    }
-
-    const folder = `san-photography/gallery/${slug}`;
-    let uploaded = 0;
-    let failed = 0;
-    setCoupleUploading((prev) => ({ ...prev, [slug]: { active: true, uploaded: 0, failed: 0 } }));
-
-    const itemsToInsert = [];
-
-    for (const file of files) {
-      try {
-        const result = await uploadToCloudinary(file, folder);
-        if (!result?.url) throw new Error('Server did not return a secure URL.');
-        itemsToInsert.push({
-            category: `gallery:${slug}`,
-            title: file.name.replace(/\.[^/.]+$/, ''),
-            imageUrl: result.url,
-            publicId: result.publicId || '',
-            resourceType: result.resourceType || 'image',
-            format: result.format || '',
-            width: result.width || null,
-            height: result.height || null,
-            bytes: result.bytes || null,
-            folder,
-            order: currentCount + itemsToInsert.length,
-            isActive: true,
-        });
-        uploaded += 1;
-      } catch (error) {
-        failed += 1;
-        console.error(`Failed to upload ${file.name}:`, error);
-      }
-      setCoupleUploading((prev) => ({ ...prev, [slug]: { active: true, uploaded, failed } }));
-    }
-
-    if (itemsToInsert.length) {
-      try {
-        const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
-          method: 'POST',
-          headers: galleryHeaders(true),
-          body: JSON.stringify({ items: itemsToInsert }),
-        });
-        const data = await readApiJson(response, 'Gallery media');
-        if (!response.ok || !data.success) {
-          throw new Error(data.message || 'Failed to save photos in MySQL.');
-        }
-      } catch (error: unknown) {
-        failed += uploaded;
-        uploaded = 0;
-        setErrMsg(getErrorMessage(error, 'Server upload succeeded but MySQL save failed.'));
-      }
-    }
-
-    setBulkFiles((prev) => ({ ...prev, [slug]: [] }));
-    await fetchCouplePhotos(slug);
-    setCoupleUploading((prev) => ({ ...prev, [slug]: { active: false, uploaded, failed } }));
-    setSaveMsg(`${uploaded} uploaded${failed ? `, ${failed} failed` : ''}.`);
-  };
-
-  const updateCouplePhoto = async (slug: string, photoId: string | number, payload: Record<string, unknown>) => {
-    const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
-      method: 'PUT',
-      headers: galleryHeaders(true),
-      body: JSON.stringify({ id: photoId, ...payload }),
-    });
-    const data = await readApiJson(response, 'Gallery media');
-    if (!response.ok || !data.success) throw new Error(data.message || 'Failed to update photo.');
-    await fetchCouplePhotos(slug);
-  };
-
-  const replaceCouplePhoto = async (slug: string, photo: { id: string | number }, file?: File) => {
-    if (!file || !ALLOWED_COUPLE_IMAGE_TYPES.includes(file.type)) {
-      setErrMsg('Only JPG, JPEG, PNG, and WEBP images are supported.');
-      return;
-    }
-    try {
-      const folder = `san-photography/gallery/${slug}`;
-      const result = await uploadToCloudinary(file, folder);
-      await updateCouplePhoto(slug, photo.id, {
-        imageUrl: result.url,
-        publicId: result.publicId || '',
-        resourceType: result.resourceType || 'image',
-        format: result.format || '',
-        width: result.width || null,
-        height: result.height || null,
-        bytes: result.bytes || null,
-        folder,
-      });
-      setSaveMsg('Photo replaced successfully.');
-    } catch (error: unknown) {
-      setErrMsg(getErrorMessage(error, 'Failed to replace photo.'));
-    }
-  };
-
-  const toggleCouplePhoto = async (slug: string, photo: { id: string | number; isActive?: boolean }) => {
-    try {
-      await updateCouplePhoto(slug, photo.id, { isActive: !photo.isActive });
-      setSaveMsg(photo.isActive ? 'Photo hidden.' : 'Photo shown.');
-    } catch (error: unknown) {
-      setErrMsg(getErrorMessage(error, 'Failed to change photo visibility.'));
-    }
-  };
-
-  const removeCouplePhoto = async (slug: string, photoId: string | number) => {
-    if (!window.confirm('Remove this photo from the story?')) return;
-    try {
-      const response = await fetch(`${buildApiUrl(API_BASE_URL, 'api/gallery.php')}?id=${encodeURIComponent(photoId)}`, {
-        method: 'DELETE',
-        headers: galleryHeaders(),
-      });
-      const data = await readApiJson(response, 'Gallery media');
-      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to remove photo.');
-      await fetchCouplePhotos(slug);
-      setSaveMsg('Photo removed.');
-    } catch (error: unknown) {
-      setErrMsg(getErrorMessage(error, 'Failed to remove photo.'));
-    }
-  };
-
-  const removeAllCouplePhotos = async (slug: string) => {
-    if (!window.confirm('Delete all photos from this story?')) return;
-    try {
-      setErrMsg('');
-      const response = await fetch(
-        `${buildApiUrl(API_BASE_URL, 'api/gallery.php')}?action=delete_all&slug=${encodeURIComponent(slug)}&category=${encodeURIComponent(`gallery:${slug}`)}`,
-        {
-          method: 'DELETE',
-          headers: galleryHeaders(),
-        }
-      );
-      const data = await readApiJson(response, 'Gallery media');
-      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to delete photos.');
-      await fetchCouplePhotos(slug);
-      setSaveMsg('All photos deleted successfully.');
-    } catch (error: unknown) {
-      setErrMsg(getErrorMessage(error, 'Failed to delete all photos.'));
-    }
-  };
-
-  const moveCouplePhoto = async (slug: string, index: number, direction: number) => {
-    const photos = [...(couplePhotos[slug] || [])];
-    const target = index + direction;
-    if (target < 0 || target >= photos.length) return;
-    [photos[index], photos[target]] = [photos[target], photos[index]];
-    const reordered = photos.map((photo, order) => ({ id: photo.id, order }));
-    setCouplePhotos((prev) => ({ ...prev, [slug]: photos.map((photo, order) => ({ ...photo, order })) }));
-    try {
-      await updateCouplePhotoOrder(reordered);
-      setSaveMsg('Photo order saved.');
-    } catch (error: unknown) {
-      setErrMsg(getErrorMessage(error, 'Failed to save photo order.'));
-      await fetchCouplePhotos(slug);
-    }
-  };
-
-  const updateCouplePhotoOrder = async (items: Array<{ id: string | number; order: number }>) => {
-    const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
-      method: 'PUT',
-      headers: galleryHeaders(true),
-      body: JSON.stringify({ action: 'reorder', items }),
-    });
-    const data = await readApiJson(response, 'Gallery media');
-    if (!response.ok || !data.success) throw new Error(data.message || 'Failed to save photo order.');
   };
 
   /* =========================================================
@@ -1633,6 +1348,14 @@ const HomePageManagement = () => {
       setSaveMsg('');
       setErrMsg('');
 
+      const homeToSave = {
+        ...content,
+        couples: {
+          ...content.couples,
+          items: normalizeCoupleStories(content.couples.items, []),
+        },
+      };
+
       const response = await fetch(buildApiUrl(API_BASE_URL, 'api/content.php'), {
         method: 'PUT',
         headers: {
@@ -1640,7 +1363,7 @@ const HomePageManagement = () => {
           Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}`,
         },
         body: JSON.stringify({
-          home: content,
+          home: homeToSave,
         }),
       });
 
@@ -1652,7 +1375,7 @@ const HomePageManagement = () => {
       const savedHome =
         data?.content?.home ??
         data?.content?.homePage ??
-        content;
+        homeToSave;
 
       const saved = mergeWithSaved(initialData, savedHome);
       setContent(saved);
@@ -1680,163 +1403,6 @@ const HomePageManagement = () => {
     setSaveMsg('Default Home values loaded. Click Save Changes to persist.');
     setErrMsg('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const renderCouplePhotoManager = (item: HomeCoupleItem) => {
-    const slug = getCoupleSlug(item);
-    const photos = couplePhotos[slug] || [];
-    const selectedFiles = bulkFiles[slug] || [];
-    const uploadState = coupleUploading[slug] || {};
-    const isLoadingPhotos = coupleLoading[slug];
-
-    return (
-      <div className="mt-4 border-t border-neutral-200 bg-[#f7f5f0] p-3 sm:p-4 lg:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-700">
-              PHOTOS FOR "{item.name}"
-            </h4>
-            <p className="mt-1 text-[11px] text-neutral-500">
-              {photos.length}/{MAX_COUPLE_PHOTOS} photos used
-              <span className="mx-1.5">•</span>
-              {Math.max(0, MAX_COUPLE_PHOTOS - photos.length)} remaining
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setBulkOpen((prev) => ({ ...prev, [slug]: !prev[slug] }))}
-              className="flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-100"
-            >
-              {bulkOpen[slug] ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              Bulk Upload Photos
-            </button>
-            <button
-              type="button"
-              onClick={() => removeAllCouplePhotos(slug)}
-              disabled={photos.length === 0}
-              className="flex items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Trash2 size={13} />
-              Delete All Photos
-            </button>
-          </div>
-        </div>
-
-        {bulkOpen[slug] && (
-          <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-3 sm:p-4">
-            <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-              <button
-                type="button"
-                onClick={() => bulkInputRefs.current[slug]?.click()}
-                className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-[#9b7740] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white transition hover:bg-[#856535] sm:w-auto"
-              >
-                <Upload size={13} /> Select Photos
-              </button>
-              <input
-                ref={(node) => {
-                  if (node) bulkInputRefs.current[slug] = node;
-                  else delete bulkInputRefs.current[slug];
-                }}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  selectCoupleFiles(slug, event.target.files);
-                  event.target.value = '';
-                }}
-              />
-              {!!selectedFiles.length && (
-                <button
-                  type="button"
-                  onClick={() => uploadCouplePhotos(slug)}
-                  disabled={uploadState.active}
-                  className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-black px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white transition hover:bg-neutral-800 disabled:opacity-50 sm:w-auto"
-                >
-                  {uploadState.active && <RefreshCw size={13} className="animate-spin" />}
-                  Upload {selectedFiles.length}
-                </button>
-              )}
-              <span className="text-[10px] leading-4 text-neutral-500 sm:max-w-sm">
-                Maximum {MAX_COUPLE_PHOTOS} photos per story. Select multiple images, review them, then upload together.
-              </span>
-            </div>
-
-            {selectedFiles.length > 0 && (
-              <div className="mt-3 grid grid-cols-3 gap-2 xs:grid-cols-4 sm:grid-cols-6 lg:grid-cols-8">
-                {selectedFiles.map((file, index) => (
-                  <BulkFilePreview
-                    key={`${file.name}-${file.lastModified}-${index}`}
-                    file={file}
-                    onRemove={() => setBulkFiles((prev) => ({ ...prev, [slug]: selectedFiles.filter((_, fileIndex) => fileIndex !== index) }))}
-                  />
-                ))}
-              </div>
-            )}
-
-            {uploadState.uploaded > 0 || uploadState.failed > 0 ? (
-              <p className="mt-3 text-[11px] text-neutral-600">
-                {uploadState.uploaded} uploaded{uploadState.failed ? `, ${uploadState.failed} failed` : ''}.
-              </p>
-            ) : null}
-          </div>
-        )}
-
-        {isLoadingPhotos ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-xs text-neutral-500">
-            <RefreshCw size={15} className="animate-spin text-[#9b7740]" /> Loading photos...
-          </div>
-        ) : (
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 lg:grid-cols-6 xl:grid-cols-8">
-            {Array.from({ length: MAX_COUPLE_PHOTOS }, (_, slotIndex) => {
-              const photo = photos[slotIndex];
-
-              if (!photo) {
-                return (
-                  <div
-                    key={`empty-slot-${slotIndex}`}
-                    className="flex aspect-square flex-col items-center justify-center rounded border border-dashed border-neutral-300 bg-white/60 p-2 text-center"
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-                      Photo #{String(slotIndex + 1).padStart(2, '0')}
-                    </span>
-                    <span className="mt-1 text-[9px] text-neutral-400">Empty slot</span>
-                  </div>
-                );
-              }
-
-              return (
-                <div key={photo.id} className={`overflow-hidden rounded border bg-white ${photo.isActive ? 'border-neutral-200' : 'border-dashed border-neutral-400 opacity-60'}`}>
-                  <div className="aspect-square bg-neutral-100">
-                    <img src={photo.imageUrl} alt={photo.title || `Photo ${slotIndex + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 border-t border-neutral-100 p-1">
-                    <label title="Replace photo" className="flex min-h-7 cursor-pointer items-center justify-center gap-0.5 rounded-md border border-neutral-200 bg-white px-1 text-[8.5px] font-semibold uppercase text-neutral-600 transition hover:bg-neutral-100 active:scale-95 whitespace-nowrap">
-                      <Upload size={10} className="shrink-0" />
-                      <span>Replace</span>
-                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => { replaceCouplePhoto(slug, photo, event.target.files?.[0]); event.target.value = ''; }} />
-                    </label>
-                    <button type="button" title="Delete photo" onClick={() => removeCouplePhoto(slug, photo.id)} className="flex min-h-7 items-center justify-center gap-0.5 rounded-md border border-red-200 bg-white px-1 text-[8.5px] font-semibold uppercase text-red-600 transition hover:bg-red-50 active:scale-95 whitespace-nowrap">
-                      <Trash2 size={10} className="shrink-0" />
-                      <span>Delete</span>
-                    </button>
-                    <button type="button" title={photo.isActive ? 'Hide photo' : 'Show photo'} onClick={() => toggleCouplePhoto(slug, photo)} className="col-span-2 flex min-h-7 items-center justify-center gap-1 rounded-md border border-neutral-200 bg-white px-1 text-[8.5px] font-semibold uppercase text-neutral-600 transition hover:bg-neutral-100 active:scale-95 whitespace-nowrap">
-                      {photo.isActive ? <Eye size={10} className="shrink-0" /> : <EyeOff size={10} className="shrink-0" />}
-                      <span>{photo.isActive ? 'Hide' : 'Show'}</span>
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-center gap-1 border-t border-neutral-100 px-1.5 py-1">
-                    <button type="button" title="Move up" disabled={slotIndex === 0} onClick={() => moveCouplePhoto(slug, slotIndex, -1)} className="flex h-8 w-8 items-center justify-center rounded-lg p-1 text-neutral-500 transition hover:bg-neutral-100 disabled:opacity-25"><ArrowUp size={11} /></button>
-                    <button type="button" title="Move down" disabled={slotIndex === photos.length - 1} onClick={() => moveCouplePhoto(slug, slotIndex, 1)} className="flex h-8 w-8 items-center justify-center rounded-lg p-1 text-neutral-500 transition hover:bg-neutral-100 disabled:opacity-25"><ArrowDown size={11} /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
   };
 
   if (loading) {
@@ -2243,7 +1809,7 @@ const HomePageManagement = () => {
                   Couple Items ({Math.min(content.couples?.items?.length || 0, MAX_COUPLES)})
                 </h3>
                 <p className="mt-0.5 text-xs text-neutral-500">
-                  Manage couple names, portrait images, order, and each story's photo album.
+                  Manage Home couple names, portrait images, and display order.
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2273,10 +1839,6 @@ const HomePageManagement = () => {
               {(content.couples?.items || []).slice(0, MAX_COUPLES).map((item, index) => {
                 const isDragging = draggedCoupleIdx === index;
                 const isOver = dragOverCoupleIdx === index;
-                const slug = getCoupleSlug(item);
-                const photoCount = (couplePhotos[slug] || []).length;
-                const isExpanded = expandedCoupleSlug === slug;
-
                 return (
                   <div
                     key={item.id || index}
@@ -2336,7 +1898,7 @@ const HomePageManagement = () => {
                           </div>
                         </div>
 
-                        {/* Couple name + photo count */}
+                        {/* Couple name */}
                         <div className="min-w-0 flex-1">
                           <Field
                             label="Couple Name"
@@ -2346,30 +1908,7 @@ const HomePageManagement = () => {
                           />
                         </div>
 
-                        {/* Photo manager trigger — same pattern as Gallery Management */}
-                        <div className="w-full shrink-0 lg:w-auto">
-                          <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-[0.25em] text-[#927344]">
-                            Photo Album
-                          </label>
-                          <div className="mb-2 text-[11px] font-medium text-neutral-500">
-                            Photos {photoCount}/{MAX_COUPLE_PHOTOS}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => toggleCoupleManager(slug)}
-                            className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-[#fbfaf7] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-100 lg:w-auto"
-                          >
-                            <Layers size={13} className="text-[#9b7740]" />
-                            <span>{isExpanded ? 'Hide Photos' : 'Manage Photos'}</span>
-                            {isExpanded ? (
-                              <ChevronDown size={13} className="text-neutral-400" />
-                            ) : (
-                              <ChevronRight size={13} className="text-neutral-400" />
-                            )}
-                          </button>
-                        </div>
-
-                        {/* Order controls + gallery */}
+                        {/* Order controls */}
                         <div className="flex shrink-0 flex-wrap items-center gap-1.5 lg:w-auto">
                           <button
                             type="button"
@@ -2389,12 +1928,6 @@ const HomePageManagement = () => {
                             <ArrowDown size={11} className="mr-1" />
                             Down
                           </button>
-                          <Link
-                            to={`/gallery/${slug}`}
-                            className="flex h-9 items-center justify-center rounded-lg border border-neutral-200 bg-white px-3 text-[9px] font-semibold uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-100"
-                          >
-                            View Gallery
-                          </Link>
                           <button
                             type="button"
                             onClick={() => removeCouple(index)}
@@ -2406,8 +1939,6 @@ const HomePageManagement = () => {
                       </div>
                     </div>
 
-                    {/* Expanded album: photos appear below the row, exactly like Gallery Management */}
-                    {isExpanded && renderCouplePhotoManager(item)}
                   </div>
                 );
               })}

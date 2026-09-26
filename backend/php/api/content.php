@@ -54,8 +54,8 @@ ob_start();
  *   couples + recentAlbums <= 16
  *
  * PHOTO LIMIT:
- *   Maximum 40 photos per individual album/card.
- *   The 40-photo limit is enforced by gallery.php.
+ *   Maximum 500 photos per individual album/card.
+ *   The photo limit is enforced by gallery.php.
  */
 
 require_once __DIR__ . '/../config/cors.php';

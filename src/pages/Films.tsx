@@ -153,7 +153,7 @@ function HeroVideo({
   return (
     <section className="group relative mt-4 sm:mt-8 w-full overflow-hidden">
       {/* Mobile-first height */}
-      <div className="relative h-[45vh] min-h-[300px] w-full overflow-hidden bg-[#1D1C1A] md:h-[60vh] md:min-h-[450px]">
+      <div className="relative h-[45vh] min-h-[300px] w-full overflow-hidden bg-[#1D1C1A] md:h-[30vh] md:min-h-[225px]">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -178,8 +178,7 @@ function HeroVideo({
           SAN / FILMS
         </div>
 
-        {/* TEXT MOVED TO EXACT BOTTOM LEFT CORNER */}
-        <div className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 lg:bottom-8 lg:left-8">
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-5 text-center">
           <motion.h1
             initial={{
               opacity: 0,
@@ -194,7 +193,7 @@ function HeroVideo({
               delay: 0.2,
               ease: EASE,
             }}
-            className="text-[clamp(1rem,2vw,1.5rem)] font-light leading-[1.2] tracking-normal text-white"
+            className="max-w-4xl text-2xl font-light leading-tight tracking-normal text-white sm:text-3xl md:text-4xl"
             style={{
               fontFamily:
                 FONT_DISPLAY,
@@ -324,15 +323,45 @@ function FilmCard({
   index,
   onExpand,
 }: FilmCardProps) {
+  const articleRef = useRef<HTMLElement | null>(null);
   const videoRef =
     useRef<HTMLVideoElement | null>(null);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(index < 2);
 
   // isActivated = user has clicked at least once (controls become visible, unmuted)
   // isPlaying = actual video play state, synced via native events
   const [isActivated, setIsActivated] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isLoading, setIsLoading] = useState(Boolean(film.videoUrl));
+  const [isLoading, setIsLoading] = useState(Boolean(film.videoUrl) && index < 2);
   const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    if (index < 2) {
+      setShouldLoadVideo(true);
+      return;
+    }
+    if (shouldLoadVideo) return;
+
+    const article = articleRef.current;
+    if (!article || typeof IntersectionObserver === "undefined") {
+      setShouldLoadVideo(true);
+      setIsLoading(Boolean(film.videoUrl));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadVideo(true);
+          setIsLoading(Boolean(film.videoUrl));
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "0px" }
+    );
+    observer.observe(article);
+    return () => observer.disconnect();
+  }, [film.videoUrl, index, shouldLoadVideo]);
 
   useEffect(() => {
     const video =
@@ -422,6 +451,12 @@ function FilmCard({
       videoRef.current;
 
     if (!video || !film.videoUrl) return;
+    if (!shouldLoadVideo) {
+      setShouldLoadVideo(true);
+      setIsLoading(true);
+      video.src = film.videoUrl;
+      video.load();
+    }
 
     if (!isActivated) {
       // First click: activate — unmute, show controls, play from start
@@ -455,6 +490,7 @@ function FilmCard({
 
   return (
     <motion.article
+      ref={articleRef}
       className="group cursor-pointer"
       initial={{
         opacity: 0,
@@ -486,11 +522,11 @@ function FilmCard({
         {film.videoUrl && !hasError ? (
           <video
             ref={videoRef}
-            src={film.videoUrl}
+            src={shouldLoadVideo ? film.videoUrl : undefined}
             muted
             loop
             playsInline
-            preload={index < 4 ? "metadata" : "none"}
+            preload={shouldLoadVideo ? "metadata" : "none"}
             onLoadedData={() => setIsLoading(false)}
             onCanPlay={() => setIsLoading(false)}
             onWaiting={() => setIsLoading(true)}
@@ -738,24 +774,22 @@ function Films() {
             FONT_BODY,
         }}
       >
-        {heroVideo && (
-          <HeroVideo
-            videoUrl={
-              heroVideo
-            }
-            heading={
-              content.heroVideoText ||
-              "Inspired by Cinema."
-            }
-          />
-        )}
+     
 
         {/* FILMS GRID - Mobile First Padding */}
 
         <section className="px-4 py-8 sm:px-6 sm:py-12 lg:px-12 lg:py-16">
           <div className="mx-auto max-w-6xl">
+          
             {/* ADDED gap-x-6 for mobile and sm:gap-x-0 for larger screens to fix overlap */}
-            <div className="mb-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-b border-[#171717]/10 pb-4 sm:mb-8 sm:gap-x-0 sm:pb-6">
+            <div className="mb-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-b border-[#171717]/10 pb-4 sm:mb-8 sm:gap-x-0 sm:pb-6 md:flex-nowrap">
+              <p
+                className="whitespace-nowrap text-[9px] uppercase tracking-[0.08em] text-[#9b7740]"
+                style={{ fontFamily: FONT_BODY }}
+              >
+                {content.heroVideoText || "Inspired by Cinema."}
+              </p>
+              <span className="mx-4 hidden h-4 w-px shrink-0 bg-[#171717]/25 sm:block" />
               {filters.map(
                 (
                   filter,
@@ -840,104 +874,39 @@ function Films() {
             )}
           </div>
         </section>
+     {heroVideo && (
+          <HeroVideo
+            videoUrl={heroVideo}
+            heading="Every love story deserves to be felt again."
+          />
+        )}
 
-        {/* CINEMATIC STATEMENT - Reduced Mobile Padding */}
+        <section className="border-t border-[#171717]/10 bg-[#F9F7F2] px-6 py-20 sm:py-24 lg:py-28">
+  <div className="mx-auto max-w-4xl text-center">
+    <p
+      className="mb-4 text-[9px] uppercase tracking-[0.32em] text-[#9b7740]"
+      style={{ fontFamily: FONT_BODY }}
+    >
+      {content.statementEyebrow || "SAN PHOTOGRAPHY"}
+    </p>
 
-        <section
-          className="px-4 py-10 sm:px-6 sm:py-12 lg:px-10 lg:py-16"
-          style={{
-            backgroundColor:
-              COLOR.paperSoft,
-          }}
-        >
-          <div className="mx-auto max-w-5xl text-center">
-            <motion.p
-              initial={{
-                opacity: 0,
-                y: 15,
-              }}
-              whileInView={{
-                opacity: 1,
-                y: 0,
-              }}
-              viewport={{
-                once: true,
-                amount: 0.3,
-              }}
-              transition={{
-                duration: 0.7,
-                ease: EASE,
-              }}
-              className="mb-4 text-[8px] uppercase tracking-[0.42em] text-[#9B7740]"
-              style={{
-                fontFamily:
-                  FONT_BODY,
-              }}
-            >
-              {
-                content.statementEyebrow
-              }
-            </motion.p>
+    <h2
+      className="text-3xl font-light leading-tight tracking-[-0.03em] text-[#171717] sm:text-4xl md:text-5xl"
+      style={{ fontFamily: FONT_DISPLAY }}
+    >
+      {content.statementHeading ||
+        "Every love story deserves to be felt again."}
+    </h2>
 
-            <motion.h2
-              initial={{
-                opacity: 0,
-                y: 20,
-              }}
-              whileInView={{
-                opacity: 1,
-                y: 0,
-              }}
-              viewport={{
-                once: true,
-                amount: 0.3,
-              }}
-              transition={{
-                duration: 0.9,
-                delay: 0.05,
-                ease: EASE,
-              }}
-              className="text-[clamp(1.75rem,4vw,3.5rem)] font-light leading-[0.95] tracking-[-0.04em] text-[#171717]"
-              style={{
-                fontFamily:
-                  FONT_DISPLAY,
-              }}
-            >
-              {
-                content.statementHeading
-              }
-            </motion.h2>
-
-            <motion.p
-              initial={{
-                opacity: 0,
-                y: 15,
-              }}
-              whileInView={{
-                opacity: 1,
-                y: 0,
-              }}
-              viewport={{
-                once: true,
-                amount: 0.3,
-              }}
-              transition={{
-                duration: 0.8,
-                delay: 0.12,
-                ease: EASE,
-              }}
-              className="mx-auto mt-4 max-w-[600px] text-[13px] leading-6 text-[#171717]/55 sm:text-sm"
-              style={{
-                fontFamily:
-                  FONT_BODY,
-              }}
-            >
-              {
-                content.statementText
-              }
-            </motion.p>
-          </div>
-        </section>
+    <p
+      className="mx-auto mt-5 max-w-2xl text-sm leading-6 text-[#171717]/55"
+      style={{ fontFamily: FONT_BODY }}
+    >
+      {content.statementText ||
+        "We craft cinematic wedding films with a focus on emotion, atmosphere and authentic moments."}
+    </p>
+  </div>
+</section>
       </main>
     </>
   );
