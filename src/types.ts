@@ -109,13 +109,14 @@ export interface BlogContent {
   posts: BlogPost[];
 }
 
-export type FilmCategory = 'Recent Cinema' | 'Wedding Films' | 'Cinematic Stories';
-export type FilmCategoryId = 'recent-cinema' | 'wedding-films' | 'cinematic-stories';
+export type FilmCategory = 'Recent Cinema' | 'Wedding Films' | 'Pre Wedding Stories' | 'Reels';
+export type FilmCategoryId = 'recent-cinema' | 'wedding-films' | 'pre-wedding-stories' | 'reels';
 
 export const FILM_CATEGORY_DEFINITIONS = [
   { id: 'recent-cinema', label: 'Recent Cinema', limit: 4 },
   { id: 'wedding-films', label: 'Wedding Films', limit: 8 },
-  { id: 'cinematic-stories', label: 'Cinematic Stories', limit: 4 },
+  { id: 'pre-wedding-stories', label: 'Pre Wedding Stories', limit: 4 },
+  { id: 'reels', label: 'Reels', limit: 8 },
 ] as const;
 
 export function normalizeFilmCategory(value: unknown): FilmCategoryId | null {
@@ -123,6 +124,10 @@ export function normalizeFilmCategory(value: unknown): FilmCategoryId | null {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-');
+
+  if (normalized === 'cinematic-stories') {
+    return 'pre-wedding-stories';
+  }
 
   return FILM_CATEGORY_DEFINITIONS.find(
     (category) => category.id === normalized || category.label.toLowerCase().replace(/[^a-z0-9]+/g, '-') === normalized
@@ -132,6 +137,7 @@ export function normalizeFilmCategory(value: unknown): FilmCategoryId | null {
 export interface FilmItem {
   id: string;
   videoUrl: string;
+  thumbnailUrl?: string;
   title: string;
   category: string;
   location: string;

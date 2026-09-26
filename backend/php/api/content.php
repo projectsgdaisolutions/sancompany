@@ -74,18 +74,20 @@ $method = $_SERVER['REQUEST_METHOD'];
 const MAX_GALLERY_CARDS = 16;
 const MAX_COUPLES_CARDS = 12;
 const MAX_RECENT_CARDS = 4;
-const MAX_FILMS = 16;
+const MAX_FILMS = 24;
 
 const ALLOWED_FILM_CATEGORIES = [
     "Recent Cinema",
     "Wedding Films",
-    "Cinematic Stories",
+    "Pre Wedding Stories",
+    "Reels",
 ];
 
 const FILM_CATEGORY_LIMITS = [
     'Recent Cinema' => 4,
     'Wedding Films' => 8,
-    'Cinematic Stories' => 4,
+    'Pre Wedding Stories' => 4,
+    'Reels' => 8,
 ];
 
 
@@ -679,6 +681,10 @@ function normalizeFilmCategory($category): ?string
     $normalized = preg_replace('/[^a-z0-9]+/', '-', $normalized) ?? '';
     $normalized = trim($normalized, '-');
 
+    if ($normalized === 'cinematic-stories') {
+        return 'Pre Wedding Stories';
+    }
+
     foreach (ALLOWED_FILM_CATEGORIES as $allowedCategory) {
         $allowedId = strtolower((string) preg_replace('/[^a-z0-9]+/', '-', $allowedCategory));
         if ($normalized === $allowedId) {
@@ -775,7 +781,7 @@ function normalizeAndValidateFilms(array $films, bool $rejectInvalidCategories =
                 ($normalizedFilm['title'] ?: 'Untitled Film') .
                 '". Received: "' .
                 (is_scalar($normalizedFilm['category']) ? (string) $normalizedFilm['category'] : gettype($normalizedFilm['category'])) .
-                '". Allowed categories: Recent Cinema, Wedding Films, Cinematic Stories.',
+                '". Allowed categories: Recent Cinema, Wedding Films, Pre Wedding Stories, Reels.',
                 400
             );
         }
@@ -986,6 +992,10 @@ try {
             ];
         }
 
+        if (isset($galleryContent['films']) && is_array($galleryContent['films'])) {
+            $galleryContent['films'] = $filmsContent;
+        }
+
         /* -------------------------------------------------
            ABOUT CONTENT
         ------------------------------------------------- */
@@ -1144,7 +1154,7 @@ try {
 
            Films are stored inside website_content.gallery.films.
            Hero Video is independent. Only films.items count
-           toward MAX_FILMS = 16. Category distribution is free.
+           toward MAX_FILMS = 24. Category distribution is validated below.
         ------------------------------------------------- */
 
         $filmsData =
@@ -1451,6 +1461,10 @@ try {
                     )
                     : getFilmsContent($pdo)
             );
+
+        if (isset($responseGallery['films']) && is_array($responseGallery['films'])) {
+            $responseGallery['films'] = $responseFilms;
+        }
 
 
         $responseCouples =

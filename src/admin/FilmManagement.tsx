@@ -39,11 +39,12 @@ const FILM_CATEGORIES: FilmCategory[] = [
 ];
 const FILM_CATEGORY_SET = new Set<string>(FILM_CATEGORIES);
 
-const MAX_FILMS = 16;
+const MAX_FILMS = 24;
 const FILM_CATEGORY_LIMITS: Record<FilmCategory, number> = {
     "Recent Cinema": 4,
     "Wedding Films": 8,
-    "Cinematic Stories": 4,
+    "Pre Wedding Stories": 4,
+    "Reels": 8,
 };
 
 const isPopulatedFilm = (film: FilmItem) =>
@@ -96,7 +97,7 @@ const FONT_BODY =
 const createNewFilm = (index: number, category: FilmCategory): FilmItem => ({
     id: `film-${crypto?.randomUUID?.() || `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`}`,
     videoUrl: "",
-    title: "New Film",
+    title: category === "Reels" ? "New Reel" : "New Film",
     category,
     location: "",
     date: "",
@@ -446,14 +447,22 @@ const FilmManagement = () => {
         setFilms((previous) => {
             const items = [...previous.items];
 
-            const newIndex =
-                direction === "up"
-                    ? index - 1
-                    : index + 1;
+            const categoryIndexes = activeFilter === "All"
+                ? items.map((_, itemIndex) => itemIndex)
+                : items.reduce<number[]>((indexes, item, itemIndex) => {
+                    if (isFilmInCategory(item, activeFilter)) {
+                        indexes.push(itemIndex);
+                    }
+                    return indexes;
+                }, []);
+            const categoryPosition = categoryIndexes.indexOf(index);
+            const newIndex = categoryIndexes[
+                categoryPosition + (direction === "up" ? -1 : 1)
+            ];
 
             if (
-                newIndex < 0 ||
-                newIndex >= items.length
+                categoryPosition < 0 ||
+                newIndex === undefined
             ) {
                 return previous;
             }
@@ -616,6 +625,67 @@ const FilmManagement = () => {
         }
     };
 
+    const handlePosterUpload = async (file: File | undefined, index: number) => {
+        if (!file) return;
+
+        const film = films.items[index];
+        if (!film) return;
+
+        const uploadKey = `${film.id}-poster`;
+        if (uploadStateRef.current[uploadKey]) return;
+
+        if (!file.type.startsWith("image/")) {
+            setUploadErrorByFilmId((previous) => ({ ...previous, [uploadKey]: "Please select a valid image file." }));
+            return;
+        }
+
+        const uploadToken = Symbol(uploadKey);
+        uploadStateRef.current[uploadKey] = uploadToken;
+        setUploadingByFilmId((previous) => ({ ...previous, [uploadKey]: true }));
+        setUploadProgressByFilmId((previous) => ({ ...previous, [uploadKey]: 0 }));
+        setUploadFileNameByFilmId((previous) => ({ ...previous, [uploadKey]: file.name }));
+        setUploadErrorByFilmId((previous) => ({ ...previous, [uploadKey]: "" }));
+
+        try {
+            const result = await uploadToCloudinary(
+                file,
+                "san-photography/films/reels/posters",
+                (progress) => {
+                    if (uploadStateRef.current[uploadKey] === uploadToken) {
+                        setUploadProgressByFilmId((previous) => ({ ...previous, [uploadKey]: progress }));
+                    }
+                }
+            );
+
+            if (uploadStateRef.current[uploadKey] !== uploadToken) return;
+            setFilms((previous) => ({
+                ...previous,
+                items: previous.items.map((item) => item.id === film.id ? { ...item, thumbnailUrl: result.url } : item),
+            }));
+            setMessage("Reel thumbnail uploaded successfully. Save changes to publish it.");
+        } catch (err: unknown) {
+            setUploadErrorByFilmId((previous) => ({
+                ...previous,
+                [uploadKey]: err instanceof Error ? err.message : "Thumbnail upload failed.",
+            }));
+        } finally {
+            if (uploadStateRef.current[uploadKey] === uploadToken) {
+                delete uploadStateRef.current[uploadKey];
+                setUploadingByFilmId((previous) => ({ ...previous, [uploadKey]: false }));
+                setUploadProgressByFilmId((previous) => {
+                    const next = { ...previous };
+                    delete next[uploadKey];
+                    return next;
+                });
+                setUploadFileNameByFilmId((previous) => {
+                    const next = { ...previous };
+                    delete next[uploadKey];
+                    return next;
+                });
+            }
+        }
+    };
+
     /* =======================================================
        UPLOAD HERO VIDEO
     ======================================================= */
@@ -758,7 +828,7 @@ const FilmManagement = () => {
 
             if (invalidFilm) {
                 throw new Error(
-                    `Invalid category "${String(invalidFilm.category)}" for film "${invalidFilm.title || "Untitled Film"}". Please select Recent Cinema, Wedding Films or Cinematic Stories.`
+                    `Invalid category "${String(invalidFilm.category)}" for film "${invalidFilm.title || "Untitled Film"}". Please select Recent Cinema, Wedding Films, Pre Wedding Stories or Reels.`
                 );
             }
 
@@ -767,7 +837,7 @@ const FilmManagement = () => {
                     ...counts,
                     [category]: actualFilms.filter((film) => isFilmInCategory(film, category)).length,
                 }),
-                { "Recent Cinema": 0, "Wedding Films": 0, "Cinematic Stories": 0 }
+                { "Recent Cinema": 0, "Wedding Films": 0, "Pre Wedding Stories": 0, "Reels": 0 }
             );
             const overLimitCategory = FILM_CATEGORIES.find(
                 (category) =>
@@ -1008,7 +1078,7 @@ const FilmManagement = () => {
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <p className="text-[9px] uppercase tracking-[0.25em] text-[#9b7740]">
-                                    New Film
+                                    {activeFilter === "Reels" ? "New Reel" : "New Film"}
                                 </p>
                                 <h3 className="mt-2 text-2xl font-light" style={{ fontFamily: FONT_DISPLAY }}>
                                     Choose category
@@ -1341,7 +1411,7 @@ const FilmManagement = () => {
                             className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#171717] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             <Plus size={14} />
-                            Add New Film
+                            {activeFilter === "Reels" ? "Add New Reel" : "Add New Film"}
                         </button>
                     </div>
                 </div>
@@ -1376,6 +1446,9 @@ const FilmManagement = () => {
                                 Maximum {selectedCategoryLimit} videos allowed
                             </span>
                         )}
+                        <p className="basis-full text-[9px] uppercase tracking-[0.12em] text-black/45">
+                            Reels capacity: {categoryCounts.Reels || 0}/8 used · {Math.max(0, 8 - (categoryCounts.Reels || 0))} slots available
+                        </p>
                     </div>
                 </div>
 
@@ -1396,7 +1469,7 @@ const FilmManagement = () => {
                                 onClick={() => addFilm()}
                                 className="mt-5 rounded-full bg-[#171717] px-5 py-2.5 text-[9px] font-semibold uppercase tracking-wider text-white"
                             >
-                                Add First Film
+                                {activeFilter === "Reels" ? "Add First Reel" : "Add First Film"}
                             </button>
                         </div>
                     ) : (
@@ -1438,7 +1511,7 @@ const FilmManagement = () => {
                                             </div>
 
                                             <span className="rounded bg-[#171717] px-2 py-1 text-[8px] font-semibold uppercase tracking-wider text-white">
-                                                FILM #
+                                                {film.category === "Reels" ? "REEL #" : "FILM #"}
                                                 {String(
                                                     index + 1
                                                 ).padStart(
@@ -1542,15 +1615,16 @@ const FilmManagement = () => {
 
                                         <div>
                                             <label className="mb-2 block text-[9px] uppercase tracking-[0.22em] text-black/45">
-                                                Film Video
+                                                {film.category === "Reels" ? "Reel Video" : "Film Video"}
                                             </label>
 
                                             {film.videoUrl ? (
-                                                <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
+                                                <div className={`relative ${film.category === "Reels" ? "aspect-[9/16] max-w-xs" : "aspect-video"} overflow-hidden rounded-lg bg-black`}>
                                                     <video
                                                         src={
                                                             film.videoUrl
                                                         }
+                                                        poster={film.thumbnailUrl || undefined}
                                                         muted
                                                         loop
                                                         playsInline
@@ -1572,7 +1646,7 @@ const FilmManagement = () => {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-black/15 bg-[#f8f6f1]">
+                                                <div className={`flex ${film.category === "Reels" ? "aspect-[9/16] max-w-xs" : "aspect-video"} items-center justify-center rounded-lg border border-dashed border-black/15 bg-[#f8f6f1]`}>
                                                     <div className="text-center text-black/30">
                                                         <Video
                                                             size={26}
@@ -1679,12 +1753,42 @@ const FilmManagement = () => {
                                             />
                                         </div>
 
+                                        {film.category === "Reels" && (
+                                            <div>
+                                                <label className="mb-2 block text-[9px] uppercase tracking-[0.22em] text-black/45">
+                                                    Reel Thumbnail
+                                                </label>
+                                                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-black/10 px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider text-black/65 transition hover:bg-black/[0.03]">
+                                                    <Upload size={12} />
+                                                    {uploadingByFilmId[`${film.id}-poster`] ? `${uploadProgressByFilmId[`${film.id}-poster`] || 0}%` : film.thumbnailUrl ? "Replace Thumbnail" : "Upload Thumbnail"}
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        disabled={uploadingByFilmId[`${film.id}-poster`]}
+                                                        className="hidden"
+                                                        onChange={(event) => {
+                                                            handlePosterUpload(event.target.files?.[0], index);
+                                                            event.target.value = "";
+                                                        }}
+                                                    />
+                                                </label>
+                                                {film.thumbnailUrl && (
+                                                    <button type="button" onClick={() => updateFilm(index, "thumbnailUrl", "")} className="mt-2 text-[9px] uppercase tracking-wider text-red-500 hover:text-red-700">
+                                                        Remove Thumbnail
+                                                    </button>
+                                                )}
+                                                {uploadErrorByFilmId[`${film.id}-poster`] && (
+                                                    <p className="mt-2 text-[9px] text-red-500">{uploadErrorByFilmId[`${film.id}-poster`]}</p>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* DETAILS */}
 
                                         <div className="grid gap-4 sm:grid-cols-2">
                                             <div className="sm:col-span-2">
                                                 <label className="mb-2 block text-[9px] uppercase tracking-[0.22em] text-black/45">
-                                                    Film Title
+                                                    {film.category === "Reels" ? "Reel Title" : "Film Title"}
                                                 </label>
 
                                                 <input
@@ -1801,7 +1905,7 @@ const FilmManagement = () => {
                                     : `Add another film (${MAX_FILMS - actualFilmCount} slots remaining)`}
                             </p>
                             <p className="mt-1 text-xs text-black/45">
-                                Each category has its own public capacity: Recent 4, Wedding 8, Cinematic 4. Deleting a film frees its category slot.
+                                Category capacity: Recent Cinema 4, Wedding Films 8, Pre Wedding Stories 4, Reels 8. Deleting a film frees its slot.
                             </p>
                         </div>
 
@@ -1814,7 +1918,7 @@ const FilmManagement = () => {
                             <Plus size={14} />
                             {selectedCategoryFull
                                 ? activeFilter === "All"
-                                    ? "16 Films Added"
+                                    ? `${MAX_FILMS} Films Added`
                                     : `${selectedCategoryLimit} Films Added`
                                 : "Add New Film"}
                         </button>

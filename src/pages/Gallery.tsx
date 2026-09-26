@@ -537,7 +537,7 @@ function Gallery() {
         {/* ===================================================
             HERO SECTION
         =================================================== */}
-        <section className="relative px-8 pt-28 pb-12 sm:px-12 sm:pt-32 sm:pb-16 lg:px-24">
+        <section className="relative px-8 pt-28 pb-6 sm:px-12 sm:pt-32 sm:pb-8 lg:px-24">
           <div className="mx-auto max-w-5xl">
             <motion.p
               initial={{
@@ -560,48 +560,45 @@ function Gallery() {
               {heroEyebrow}
             </motion.p>
 
-            <RevealHeading
-              as="h1"
-              lines={[
-                {
-                  text: heroHeadingLine1,
-                  font: FONT_DISPLAY,
-                  weight: 300,
-                  block: true,
-                },
-                {
-                  text: heroHeadingLine2,
-                  font: FONT_DISPLAY,
-                  weight: 300,
-                  italic: true,
-                  block: true,
-                },
-              ]}
-              delayStart={0.08}
-              className="mt-3 text-4xl font-light leading-[1.05] tracking-[-0.03em] text-[#181715] sm:text-6xl md:text-7xl lg:text-8xl"
-            />
+ <motion.h1
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{
+    duration: 0.8,
+    delay: 0.08,
+    ease: EASE_EXPO,
+  }}
+  className="mt-3 text-4xl font-light leading-[1.05] tracking-[-0.03em] text-[#181715] sm:text-6xl md:text-7xl lg:text-8xl"
+  style={{
+    fontFamily: FONT_DISPLAY,
+    fontWeight: 300,
+  }}
+>
+  <span>{heroHeadingLine1}</span>{" "}
+  <span className="italic">{heroHeadingLine2}</span>
+</motion.h1>
 
-            <motion.p
-              initial={{
-                opacity: 0,
-                y: 15,
-              }}
-              animate={{
-                opacity: 1,
-                y: 0,
-              }}
-              transition={{
-                duration: 0.6,
-                delay: 0.2,
-                ease: EASE_EXPO,
-              }}
-              className="mt-4 max-w-sm text-xs leading-6 text-black/50 md:text-sm md:leading-7"
-              style={{
-                fontFamily: FONT_BODY,
-              }}
-            >
-              {heroDescription}
-            </motion.p>
+         <motion.p
+  initial={{
+    opacity: 0,
+    y: 15,
+  }}
+  animate={{
+    opacity: 1,
+    y: 0,
+  }}
+  transition={{
+    duration: 0.6,
+    delay: 0.2,
+    ease: EASE_EXPO,
+  }}
+  className="mt-4 max-w-2xl text-xs leading-6 text-black/50 md:text-sm md:leading-7"
+  style={{
+    fontFamily: FONT_BODY,
+  }}
+>
+  {heroDescription}
+</motion.p>
           </div>
         </section>
 

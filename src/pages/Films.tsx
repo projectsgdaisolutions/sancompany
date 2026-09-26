@@ -22,6 +22,7 @@ interface FilmItem {
   location?: string;
   date?: string;
   videoUrl: string;
+  thumbnailUrl?: string;
   isActive?: boolean;
   description?: string;
   order?: number;
@@ -36,7 +37,7 @@ interface FilmsContent {
   statementText: string;
 }
 
-type FilmCategory = "All" | "Recent Cinema" | "Wedding Films" | "Cinematic Stories";
+type FilmCategory = "All" | "Recent Cinema" | "Wedding Films" | "Pre Wedding Stories" | "Reels";
 
 /* =========================================================
    API
@@ -292,7 +293,7 @@ function VideoModal({
           e.stopPropagation()
         }
       >
-        <div className="aspect-video w-full overflow-hidden bg-black shadow-2xl">
+        <div className={`${normalizeFilmCategory(film.category) === "reels" ? "mx-auto aspect-[9/16] max-h-[85vh] max-w-sm" : "aspect-video w-full"} overflow-hidden bg-black shadow-2xl`}>
           {film.videoUrl && (
             <video
               src={film.videoUrl}
@@ -316,12 +317,14 @@ interface FilmCardProps {
   film: FilmItem;
   index: number;
   onExpand: (film: FilmItem) => void;
+  vertical?: boolean;
 }
 
 function FilmCard({
   film,
   index,
   onExpand,
+  vertical = false,
 }: FilmCardProps) {
   const articleRef = useRef<HTMLElement | null>(null);
   const videoRef =
@@ -514,7 +517,7 @@ function FilmCard({
       }}
     >
       <div
-        className="relative aspect-video overflow-hidden bg-black transition-all duration-500 group-hover:shadow-2xl"
+        className={`relative ${vertical ? "aspect-[9/16]" : "aspect-video"} overflow-hidden bg-black transition-all duration-500 group-hover:shadow-2xl`}
         onClick={
           handleCardClick
         }
@@ -526,6 +529,7 @@ function FilmCard({
             muted
             loop
             playsInline
+            poster={film.thumbnailUrl || undefined}
             preload={shouldLoadVideo ? "metadata" : "none"}
             onLoadedData={() => setIsLoading(false)}
             onCanPlay={() => setIsLoading(false)}
@@ -574,7 +578,7 @@ function FilmCard({
               fontFamily: FONT_BODY,
             }}
           >
-            {film.category}
+            {FILM_CATEGORY_DEFINITIONS.find((category) => category.id === normalizeFilmCategory(film.category))?.label || film.category}
           </p>
 
           <p
@@ -735,9 +739,17 @@ function Films() {
         return visibleItems;
       }
 
-      return visibleItems.filter(
+      const filteredItems = visibleItems.filter(
         (film) => normalizeFilmCategory(film.category) === normalizeFilmCategory(activeFilter)
       );
+
+      if (activeFilter === "Reels") {
+        return filteredItems
+          .sort((first, second) => (first.order ?? 0) - (second.order ?? 0))
+          .slice(0, 8);
+      }
+
+      return filteredItems;
     }, [
       content.items,
       activeFilter,
@@ -854,6 +866,7 @@ function Films() {
                       onExpand={
                         setSelectedFilm
                       }
+                      vertical={activeFilter === "Reels"}
                     />
                   )
                 )}
