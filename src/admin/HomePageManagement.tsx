@@ -6,10 +6,15 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Image as ImageIcon,
+  Plus,
+  RefreshCw,
+  Trash2,
   Upload,
+  X,
 } from 'lucide-react';
 
-import { uploadToCloudinary } from '../services/cloudinary';
+import { uploadToCloudinary, type CloudinaryUploadResult } from '../services/cloudinary';
 import { API_URL, buildApiUrl, readApiJson } from '../services/api';
 
 const API_BASE_URL = API_URL;
@@ -86,7 +91,23 @@ type HomeCoupleItem = {
   id: string;
   name: string;
   img: string;
+  slug?: string;
 };
+type CoupleGalleryPhoto = {
+  id: string | number;
+  imageUrl: string;
+  title?: string;
+  order?: number;
+};
+type CouplePhotoQueueItem = {
+  id: string;
+  file: File;
+  status: 'queued' | 'uploading' | 'saving' | 'failed' | 'uploaded';
+  progress: number;
+  error?: string;
+  media?: CloudinaryUploadResult;
+};
+type RejectedCouplePhoto = { fileName: string; message: string };
 type HomeVideoItem = { id: string; title: string; url: string };
 type HomeTestimonialItem = { id: string; quote: string; author: string };
 
@@ -174,9 +195,9 @@ const buildInitialHomeContent = (): HomeContent => ({
     heading: 'Real love',
     italicHeading: 'stories.',
     items: [
-      { id: 'couple-0', name: 'Kapil & Payal', img: image01 },
-      { id: 'couple-1', name: 'Pratik & Megha', img: image04 },
-      { id: 'couple-2', name: 'Tanmay & Achal', img: image07 },
+      { id: 'couple-0', name: 'Kapil & Payal', img: image01, slug: 'kapil-payal' },
+      { id: 'couple-1', name: 'Pratik & Megha', img: image04, slug: 'pratik-megha' },
+      { id: 'couple-2', name: 'Tanmay & Achal', img: image07, slug: 'tanmay-achal' },
       { id: 'couple-3', name: 'Rohan & Anjali', img: '' },
       { id: 'couple-4', name: 'Story 05', img: '' },
       { id: 'couple-5', name: 'Story 06', img: '' },
@@ -233,6 +254,51 @@ const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
 const MAX_COUPLES = 6;
+const MAX_COUPLE_PHOTOS = 40;
+const MAX_COUPLE_PHOTO_SIZE = 25 * 1024 * 1024;
+const COUPLE_PHOTO_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const COUPLE_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const COUPLE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function createCoupleSlug(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function getCouplePhotoFileError(file: File): string | null {
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  const expectedType = extension === 'jpg' || extension === 'jpeg'
+    ? 'image/jpeg'
+    : extension === 'png'
+      ? 'image/png'
+      : extension === 'webp'
+        ? 'image/webp'
+        : '';
+
+  if (!COUPLE_PHOTO_EXTENSIONS.has(extension) || !COUPLE_PHOTO_TYPES.has(file.type) || file.type !== expectedType) {
+    return 'Use JPG, JPEG, PNG, or WEBP images.';
+  }
+  if (file.size <= 0) return 'The file is empty.';
+  if (file.size > MAX_COUPLE_PHOTO_SIZE) return 'File size exceeds the 25 MiB limit.';
+  return null;
+}
+
+function CouplePhotoPreview({ file }: { file: File }) {
+  const [previewUrl, setPreviewUrl] = useState('');
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return previewUrl ? <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" /> : null;
+}
+
 const normalizeCollageImages = (images: Array<string | { url?: string; image?: string; visible?: boolean }>): HomeCollageImage[] =>
   images.map((image) =>
     typeof image === 'string'
@@ -247,12 +313,24 @@ const normalizeCollageImages = (images: Array<string | { url?: string; image?: s
 function normalizeCoupleStories(savedItems: unknown, fallback: HomeCoupleItem[]): HomeCoupleItem[] {
   if (!Array.isArray(savedItems)) return fallback;
 
+  const usedSlugs = new Set<string>();
   return savedItems.map((savedItem) => {
     const homeItem = savedItem as Record<string, unknown>;
+    const id = String(homeItem.id ?? '');
+    const name = String(homeItem.name ?? '');
+    const storedSlug = String(homeItem.slug ?? '').trim();
+    const baseSlug = COUPLE_SLUG_PATTERN.test(storedSlug) ? storedSlug : createCoupleSlug(name);
+    let slug = baseSlug;
+    if (slug && usedSlugs.has(slug)) {
+      const idSuffix = createCoupleSlug(id);
+      if (idSuffix) slug = `${slug}-${idSuffix}`;
+    }
+    if (slug) usedSlugs.add(slug);
     return {
-      id: String(homeItem.id ?? ''),
-      name: String(homeItem.name ?? ''),
+      id,
+      name,
       img: String(homeItem.img ?? ''),
+      slug,
     };
   });
 }
@@ -866,6 +944,18 @@ const HomePageManagement = () => {
 
   const [draggedCoupleIdx, setDraggedCoupleIdx] = useState<number | null>(null);
   const [dragOverCoupleIdx, setDragOverCoupleIdx] = useState<number | null>(null);
+  const [activeCoupleGallery, setActiveCoupleGallery] = useState<{ slug: string; name: string } | null>(null);
+  const [coupleGalleryPhotos, setCoupleGalleryPhotos] = useState<Record<string, CoupleGalleryPhoto[]>>({});
+  const [coupleGalleryLoaded, setCoupleGalleryLoaded] = useState<Record<string, boolean>>({});
+  const [couplePhotoQueues, setCouplePhotoQueues] = useState<Record<string, CouplePhotoQueueItem[]>>({});
+  const [rejectedCouplePhotos, setRejectedCouplePhotos] = useState<Record<string, RejectedCouplePhoto[]>>({});
+  const [selectedCouplePhotoIds, setSelectedCouplePhotoIds] = useState<Record<string, string[]>>({});
+  const [replacingCouplePhotoId, setReplacingCouplePhotoId] = useState<string | null>(null);
+  const [replacementProgress, setReplacementProgress] = useState(0);
+  const [draggedCouplePhotoId, setDraggedCouplePhotoId] = useState<string | null>(null);
+  const [coupleGalleryLoading, setCoupleGalleryLoading] = useState(false);
+  const [coupleGalleryBusy, setCoupleGalleryBusy] = useState(false);
+  const [coupleGalleryError, setCoupleGalleryError] = useState('');
 
   const [draggedVideoIdx, setDraggedVideoIdx] = useState<number | null>(null);
   const [dragOverVideoIdx, setDragOverVideoIdx] = useState<number | null>(null);
@@ -907,6 +997,409 @@ const HomePageManagement = () => {
   useEffect(() => {
     fetchHomeContent();
   }, [fetchHomeContent]);
+
+  const getCoupleGalleryKey = (item: HomeCoupleItem) => {
+    return item.id.trim() || item.slug?.trim() || createCoupleSlug(item.name);
+  };
+
+  const authenticatedGalleryHeaders = () => {
+    const token = localStorage.getItem('adminToken') || '';
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  };
+
+  const authenticatedGalleryJsonHeaders = () => ({
+    'Content-Type': 'application/json',
+    ...authenticatedGalleryHeaders(),
+  });
+
+  const fetchCoupleGalleryPhotos = async (slug: string) => {
+    const response = await fetch(
+      buildApiUrl(API_BASE_URL, `api/gallery.php?slug=${encodeURIComponent(slug)}&section=homeCouples&include_inactive=1`),
+      { headers: authenticatedGalleryHeaders() }
+    );
+    const data = await readApiJson(response, 'Couple gallery');
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || 'Failed to load couple gallery photos.');
+    }
+
+    const photos = Array.isArray(data.photos)
+      ? data.photos.map((photo: Record<string, unknown>) => ({
+          id: String(photo.id ?? ''),
+          imageUrl: String(photo.imageUrl ?? photo.image_url ?? photo.url ?? ''),
+          title: String(photo.title ?? ''),
+          order: typeof photo.order === 'number' ? photo.order : undefined,
+        })).filter((photo: CoupleGalleryPhoto) => photo.id && photo.imageUrl)
+      : [];
+    setCoupleGalleryPhotos((prev) => ({ ...prev, [slug]: photos }));
+    setCoupleGalleryLoaded((prev) => ({ ...prev, [slug]: true }));
+    return photos;
+  };
+
+  useEffect(() => {
+    if (loading) return;
+    const slugs = Array.from(new Set((content.couples.items || []).map(getCoupleGalleryKey)));
+    void Promise.all(slugs.map((slug) => fetchCoupleGalleryPhotos(slug).catch(() => undefined)));
+  }, [content.couples.items, loading]);
+
+  const openCoupleGallery = async (item: HomeCoupleItem) => {
+    const slug = getCoupleGalleryKey(item);
+    setActiveCoupleGallery({ slug, name: item.name || 'Couple' });
+    setCoupleGalleryError('');
+    setCoupleGalleryLoading(true);
+    setCoupleGalleryLoaded((prev) => ({ ...prev, [slug]: false }));
+    try {
+      await fetchCoupleGalleryPhotos(slug);
+    } catch (error: unknown) {
+      setCoupleGalleryError(getErrorMessage(error, 'Failed to load couple gallery photos.'));
+    } finally {
+      setCoupleGalleryLoading(false);
+    }
+  };
+
+  const toggleCoupleGallery = (item: HomeCoupleItem) => {
+    const slug = getCoupleGalleryKey(item);
+    if (activeCoupleGallery?.slug === slug) {
+      setActiveCoupleGallery(null);
+      return;
+    }
+    void openCoupleGallery(item);
+  };
+
+  const queueCoupleGalleryPhotos = (slug: string, fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    if (!coupleGalleryLoaded[slug]) {
+      setCoupleGalleryError('Load the current album photos before uploading.');
+      return;
+    }
+
+    const currentCount = coupleGalleryPhotos[slug]?.length || 0;
+    const existingQueue = couplePhotoQueues[slug] || [];
+    const pendingCount = existingQueue.filter((photo) => photo.status !== 'uploaded').length;
+    const available = Math.max(0, MAX_COUPLE_PHOTOS - currentCount - pendingCount);
+    const seenFiles = new Set(existingQueue.map((photo) => `${photo.file.name}:${photo.file.size}:${photo.file.lastModified}`));
+    const accepted: CouplePhotoQueueItem[] = [];
+    const rejected: RejectedCouplePhoto[] = [];
+
+    for (const file of Array.from(fileList)) {
+      const validationError = getCouplePhotoFileError(file);
+      const fileKey = `${file.name}:${file.size}:${file.lastModified}`;
+      if (validationError) {
+        rejected.push({ fileName: file.name, message: validationError });
+      } else if (seenFiles.has(fileKey)) {
+        rejected.push({ fileName: file.name, message: 'This file is already selected.' });
+      } else if (accepted.length >= available) {
+        rejected.push({ fileName: file.name, message: `Only ${available} more photo${available === 1 ? '' : 's'} can be added to this couple.` });
+      } else {
+        seenFiles.add(fileKey);
+        accepted.push({
+          id: crypto.randomUUID(),
+          file,
+          status: 'queued',
+          progress: 0,
+        });
+      }
+    }
+
+    if (accepted.length) {
+      setCouplePhotoQueues((prev) => ({ ...prev, [slug]: [...(prev[slug] || []), ...accepted] }));
+    }
+    if (rejected.length) {
+      setRejectedCouplePhotos((prev) => ({ ...prev, [slug]: [...(prev[slug] || []), ...rejected] }));
+    }
+  };
+
+  const updateCoupleQueueItem = (slug: string, id: string, changes: Partial<CouplePhotoQueueItem>) => {
+    setCouplePhotoQueues((prev) => ({
+      ...prev,
+      [slug]: (prev[slug] || []).map((photo) => photo.id === id ? { ...photo, ...changes } : photo),
+    }));
+  };
+
+  const clearCouplePhotoQueue = (slug: string) => {
+    if (coupleGalleryBusy) return;
+    setCouplePhotoQueues((prev) => ({ ...prev, [slug]: [] }));
+    setRejectedCouplePhotos((prev) => ({ ...prev, [slug]: [] }));
+  };
+
+  const uploadCoupleGalleryPhotos = async (slug: string, retryFailed = false) => {
+    if (coupleGalleryBusy) return;
+    if (!coupleGalleryLoaded[slug]) {
+      setCoupleGalleryError('Load the current album photos before uploading.');
+      return;
+    }
+    const queue = couplePhotoQueues[slug] || [];
+    const candidates = queue.filter((photo) => retryFailed ? photo.status === 'failed' : photo.status === 'queued');
+    if (!candidates.length) return;
+
+    const currentCount = coupleGalleryPhotos[slug]?.length || 0;
+    const remaining = Math.max(0, MAX_COUPLE_PHOTOS - currentCount);
+    if (candidates.length > remaining) {
+      setCoupleGalleryError(`This couple's gallery has room for only ${remaining} more photos.`);
+      return;
+    }
+
+    setCoupleGalleryBusy(true);
+    setCoupleGalleryError('');
+    const folder = `san-photography/home-couples/${slug}`;
+    const uploaded: Array<{ photo: CouplePhotoQueueItem; media: CloudinaryUploadResult }> = [];
+
+    for (const photo of candidates) {
+      updateCoupleQueueItem(slug, photo.id, {
+        status: photo.media ? 'saving' : 'uploading',
+        progress: photo.media ? 100 : 0,
+        error: undefined,
+      });
+      try {
+        const media = photo.media || await uploadToCloudinary(
+          photo.file,
+          folder,
+          (progress) => updateCoupleQueueItem(slug, photo.id, { progress })
+        );
+        if (!media?.url) throw new Error('The media service did not return an image URL.');
+        uploaded.push({ photo, media });
+        updateCoupleQueueItem(slug, photo.id, { status: 'saving', progress: 100, media });
+      } catch (error: unknown) {
+        updateCoupleQueueItem(slug, photo.id, {
+          status: 'failed',
+          error: getErrorMessage(error, 'Upload failed.'),
+        });
+      }
+    }
+
+    try {
+      if (uploaded.length) {
+        const retryCandidates = uploaded.filter(({ photo }) => Boolean(photo.media));
+        const existingKeys = new Set<string>();
+        if (retryCandidates.length) {
+          const existingResponse = await fetch(
+            buildApiUrl(API_BASE_URL, `api/gallery.php?slug=${encodeURIComponent(slug)}&section=homeCouples&include_inactive=1`),
+            { headers: authenticatedGalleryHeaders() }
+          );
+          const existingData = await readApiJson(existingResponse, 'Verify couple gallery photos');
+          if (!existingResponse.ok || !existingData.success) {
+            throw new Error(existingData.message || 'Could not verify saved photos before retrying.');
+          }
+          for (const photo of Array.isArray(existingData.photos) ? existingData.photos : []) {
+            if (photo.publicId) existingKeys.add(`id:${photo.publicId}`);
+            if (photo.imageUrl) existingKeys.add(`url:${photo.imageUrl}`);
+          }
+        }
+
+        const toSave = uploaded.filter(({ photo, media }) => {
+          const alreadySaved = Boolean(
+            (media.publicId && existingKeys.has(`id:${media.publicId}`)) ||
+            (media.url && existingKeys.has(`url:${media.url}`))
+          );
+          if (alreadySaved) updateCoupleQueueItem(slug, photo.id, { status: 'uploaded', progress: 100, error: undefined });
+          return !alreadySaved;
+        });
+
+        if (toSave.length) {
+          const currentPhotos = await fetchCoupleGalleryPhotos(slug);
+          if (currentPhotos.length + toSave.length > MAX_COUPLE_PHOTOS) {
+            throw new Error(`Maximum ${MAX_COUPLE_PHOTOS} photos reached for this couple.`);
+          }
+          const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
+            method: 'POST',
+            headers: authenticatedGalleryJsonHeaders(),
+            body: JSON.stringify({
+              items: toSave.map(({ photo, media }, index) => ({
+              category: `home-couple:${slug}`,
+              title: photo.file.name.replace(/\.[^/.]+$/, '') || 'Untitled Photo',
+              imageUrl: media.url,
+              publicId: media.publicId || '',
+              resourceType: media.resourceType || 'image',
+              format: media.format || '',
+              width: media.width || null,
+              height: media.height || null,
+              bytes: media.bytes || null,
+              folder,
+              order: currentPhotos.length + index,
+              isActive: true,
+              })),
+            }),
+          });
+          const data = await readApiJson(response, 'Couple gallery upload');
+          if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Uploaded images could not be saved to this couple gallery.');
+          }
+          toSave.forEach(({ photo }) => updateCoupleQueueItem(slug, photo.id, {
+            status: 'uploaded',
+            progress: 100,
+            error: undefined,
+          }));
+        }
+        await fetchCoupleGalleryPhotos(slug);
+      }
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Failed to save uploaded photos.');
+      uploaded.forEach(({ photo, media }) => updateCoupleQueueItem(slug, photo.id, {
+        status: 'failed',
+        media,
+        error: message,
+      }));
+      setCoupleGalleryError(message);
+    } finally {
+      setCoupleGalleryBusy(false);
+    }
+  };
+
+  const deleteCoupleGalleryPhoto = async (slug: string, photoId: string | number) => {
+    if (!window.confirm('Remove this photo from the couple gallery?')) return;
+    setCoupleGalleryBusy(true);
+    setCoupleGalleryError('');
+    try {
+      const response = await fetch(
+        buildApiUrl(API_BASE_URL, `api/gallery.php?id=${encodeURIComponent(String(photoId))}`),
+        { method: 'DELETE', headers: authenticatedGalleryHeaders() }
+      );
+      const data = await readApiJson(response, 'Delete couple photo');
+      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to delete photo.');
+      setCoupleGalleryPhotos((prev) => ({
+        ...prev,
+        [slug]: (prev[slug] || []).filter((photo) => String(photo.id) !== String(photoId)),
+      }));
+      setSelectedCouplePhotoIds((prev) => ({
+        ...prev,
+        [slug]: (prev[slug] || []).filter((id) => id !== String(photoId)),
+      }));
+      await fetchCoupleGalleryPhotos(slug);
+    } catch (error: unknown) {
+      setCoupleGalleryError(getErrorMessage(error, 'Failed to delete photo.'));
+    } finally {
+      setCoupleGalleryBusy(false);
+    }
+  };
+
+  const deleteSelectedCoupleGalleryPhotos = async (slug: string) => {
+    const selectedIds = selectedCouplePhotoIds[slug] || [];
+    if (!selectedIds.length || coupleGalleryBusy) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected photos?`)) return;
+
+    setCoupleGalleryBusy(true);
+    setCoupleGalleryError('');
+    const deletedIds: string[] = [];
+    const failedIds: string[] = [];
+    try {
+      for (const id of selectedIds) {
+        try {
+          const response = await fetch(
+            buildApiUrl(API_BASE_URL, `api/gallery.php?id=${encodeURIComponent(id)}`),
+            { method: 'DELETE', headers: authenticatedGalleryHeaders() }
+          );
+          const data = await readApiJson(response, 'Delete couple photo');
+          if (!response.ok || !data.success) throw new Error(data.message || 'Delete failed.');
+          deletedIds.push(id);
+        } catch {
+          failedIds.push(id);
+        }
+      }
+      setCoupleGalleryPhotos((prev) => ({
+        ...prev,
+        [slug]: (prev[slug] || []).filter((photo) => !deletedIds.includes(String(photo.id))),
+      }));
+      setSelectedCouplePhotoIds((prev) => ({ ...prev, [slug]: failedIds }));
+      await fetchCoupleGalleryPhotos(slug);
+      if (failedIds.length) setCoupleGalleryError(`Could not delete ${failedIds.length} selected photo${failedIds.length === 1 ? '' : 's'}.`);
+    } catch (error: unknown) {
+      setCoupleGalleryError(getErrorMessage(error, 'Failed to refresh the couple gallery.'));
+    } finally {
+      setCoupleGalleryBusy(false);
+    }
+  };
+
+  const replaceCoupleGalleryPhoto = async (slug: string, photo: CoupleGalleryPhoto, file?: File) => {
+    if (!file || coupleGalleryBusy) return;
+    const validationError = getCouplePhotoFileError(file);
+    if (validationError) {
+      setCoupleGalleryError(validationError);
+      return;
+    }
+
+    setCoupleGalleryBusy(true);
+    setReplacingCouplePhotoId(String(photo.id));
+    setReplacementProgress(0);
+    setCoupleGalleryError('');
+    let uploadedMedia: CloudinaryUploadResult | null = null;
+    try {
+      const folder = `san-photography/home-couples/${slug}`;
+      uploadedMedia = await uploadToCloudinary(file, folder, setReplacementProgress);
+      const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
+        method: 'PUT',
+        headers: authenticatedGalleryJsonHeaders(),
+        body: JSON.stringify({
+          id: Number(photo.id),
+          title: file.name.replace(/\.[^/.]+$/, ''),
+          imageUrl: uploadedMedia.url,
+          publicId: uploadedMedia.publicId || '',
+          resourceType: uploadedMedia.resourceType || 'image',
+          format: uploadedMedia.format || '',
+          width: uploadedMedia.width,
+          height: uploadedMedia.height,
+          bytes: uploadedMedia.bytes,
+          folder,
+          order: photo.order ?? 0,
+        }),
+      });
+      const data = await readApiJson(response, 'Replace couple photo');
+      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to replace photo.');
+      await fetchCoupleGalleryPhotos(slug);
+    } catch (error: unknown) {
+      if (uploadedMedia?.url) {
+        try {
+          const path = new URL(uploadedMedia.url, window.location.origin).pathname;
+          if (path.startsWith('/uploads/')) {
+            await fetch(buildApiUrl(API_BASE_URL, `api/media-api/delete.php?path=${encodeURIComponent(path)}`), {
+              method: 'DELETE',
+              headers: authenticatedGalleryHeaders(),
+            });
+          }
+        } catch {
+          // Preserve the primary replacement error.
+        }
+      }
+      setCoupleGalleryError(getErrorMessage(error, 'Failed to replace photo.'));
+    } finally {
+      setReplacingCouplePhotoId(null);
+      setReplacementProgress(0);
+      setCoupleGalleryBusy(false);
+    }
+  };
+
+  const moveCoupleGalleryPhoto = async (slug: string, photoIndex: number, targetIndex: number) => {
+    const photos = coupleGalleryPhotos[slug] || [];
+    if (targetIndex < 0 || targetIndex >= photos.length || coupleGalleryBusy) return;
+    const reordered = [...photos];
+    const [moved] = reordered.splice(photoIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    const orderedPhotos = reordered.map((photo, order) => ({ ...photo, order }));
+    setCoupleGalleryPhotos((prev) => ({ ...prev, [slug]: orderedPhotos }));
+    setCoupleGalleryBusy(true);
+    setCoupleGalleryError('');
+    try {
+      const response = await fetch(buildApiUrl(API_BASE_URL, 'api/gallery.php'), {
+        method: 'PUT',
+        headers: authenticatedGalleryJsonHeaders(),
+        body: JSON.stringify({
+          action: 'reorder',
+          items: orderedPhotos.map((photo) => ({ id: photo.id, order: photo.order })),
+        }),
+      });
+      const data = await readApiJson(response, 'Reorder couple photos');
+      if (!response.ok || !data.success) throw new Error(data.message || 'Failed to save photo order.');
+    } catch (error: unknown) {
+      setCoupleGalleryError(getErrorMessage(error, 'Failed to save photo order.'));
+      try {
+        await fetchCoupleGalleryPhotos(slug);
+      } catch {
+        // Keep the current view if the server cannot reload the album.
+      }
+    } finally {
+      setCoupleGalleryBusy(false);
+    }
+  };
 
   /* Generic Section Field Updater */
   const updateField = (section: HomeSectionField, field: string, value: unknown) => {
@@ -1063,7 +1556,13 @@ const HomePageManagement = () => {
       couples: {
         ...prev.couples,
         items: prev.couples.items.map((item, i) =>
-          i === index ? { ...item, [field]: value } : item
+          i === index
+            ? {
+                ...item,
+                [field]: value,
+                ...(field === 'name' && !item.slug ? { slug: createCoupleSlug(value) } : {}),
+              }
+            : item
         ),
       },
     }));
@@ -1087,6 +1586,7 @@ const HomePageManagement = () => {
               id: `couple-${Date.now()}`,
               name: '',
               img: '',
+              slug: '',
             },
           ],
         },
@@ -1403,6 +1903,195 @@ const HomePageManagement = () => {
     setSaveMsg('Default Home values loaded. Click Save Changes to persist.');
     setErrMsg('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const renderCoupleGallery = (slug: string, name: string) => {
+    const photos = coupleGalleryPhotos[slug] || [];
+    const queue = couplePhotoQueues[slug] || [];
+    const rejected = rejectedCouplePhotos[slug] || [];
+    const selectedIds = selectedCouplePhotoIds[slug] || [];
+    const photosLoaded = Boolean(coupleGalleryLoaded[slug]);
+    const remaining = photosLoaded ? Math.max(0, MAX_COUPLE_PHOTOS - photos.length) : 0;
+    const queuedCount = queue.filter((photo) => photo.status === 'queued').length;
+    const failedCount = queue.filter((photo) => photo.status === 'failed').length;
+    const uploadedCount = queue.filter((photo) => photo.status === 'uploaded').length;
+    const allSelected = photos.length > 0 && selectedIds.length === photos.length;
+
+    return (
+      <div className="mt-4 border-t border-neutral-200 bg-[#f7f5f0] p-3 sm:p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-800">Couple Photos</h4>
+            <p className="mt-1 text-[11px] text-neutral-500">{photosLoaded ? `${photos.length} / ${MAX_COUPLE_PHOTOS}` : `— / ${MAX_COUPLE_PHOTOS}`}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedCouplePhotoIds((prev) => ({ ...prev, [slug]: allSelected ? [] : photos.map((photo) => String(photo.id)) }))}
+              disabled={!photos.length || coupleGalleryBusy}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-[9px] font-semibold uppercase tracking-wider text-neutral-700 disabled:opacity-40"
+            >
+              {allSelected ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void deleteSelectedCoupleGalleryPhotos(slug)}
+              disabled={!selectedIds.length || coupleGalleryBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-[9px] font-semibold uppercase tracking-wider text-red-600 disabled:opacity-40"
+            >
+              <Trash2 size={12} /> Bulk Delete{selectedIds.length ? ` (${selectedIds.length})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveCoupleGallery(null)}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-[9px] font-semibold uppercase tracking-wider text-neutral-600"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        {coupleGalleryError && (
+          <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <span>{coupleGalleryError}</span>
+            {!photosLoaded && !coupleGalleryLoading && (
+              <button type="button" onClick={() => void openCoupleGallery({ id: slug, name, img: '', slug })} className="font-semibold underline underline-offset-2">
+                Retry loading photos
+              </button>
+            )}
+          </div>
+        )}
+
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (!coupleGalleryBusy && photosLoaded && remaining > 0) queueCoupleGalleryPhotos(slug, event.dataTransfer.files);
+          }}
+          className="mb-4 flex flex-col items-start justify-between gap-3 rounded-lg border-2 border-dashed border-[#cfc5b4] bg-white/70 px-3 py-4 sm:flex-row sm:items-center"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-700">Add photos to {name}</p>
+            <p className="mt-1 text-[10px] text-neutral-500">Choose multiple JPG, PNG, or WEBP files · max 25 MiB each</p>
+            {!photosLoaded && <p className="mt-1 text-[10px] text-amber-700">Load the current photo count before uploading.</p>}
+            {photosLoaded && remaining === 0 && <p className="mt-1 text-xs font-semibold text-red-600">Maximum 40 photos reached.</p>}
+          </div>
+          <label className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[9px] font-semibold uppercase tracking-wider text-white ${!photosLoaded || remaining === 0 || coupleGalleryBusy ? 'cursor-not-allowed bg-neutral-400' : 'cursor-pointer bg-[#9b7740] hover:bg-[#856535]'}`}>
+            <Plus size={13} /> Bulk Upload
+            {photosLoaded && remaining > 0 && !coupleGalleryBusy && (
+              <input
+                type="file"
+                multiple
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  queueCoupleGalleryPhotos(slug, event.target.files);
+                  event.target.value = '';
+                }}
+              />
+            )}
+          </label>
+        </div>
+
+        {(queue.length > 0 || rejected.length > 0) && (
+          <div className="mb-4 rounded-lg border border-neutral-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-700">
+                {coupleGalleryBusy ? 'Uploading selected photos' : `${queue.length} selected · ${queuedCount} ready · ${uploadedCount} uploaded · ${failedCount} failed`}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {failedCount > 0 && <button type="button" onClick={() => void uploadCoupleGalleryPhotos(slug, true)} disabled={coupleGalleryBusy} className="rounded border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[9px] font-semibold uppercase text-amber-800 disabled:opacity-50">Retry Failed</button>}
+                {queuedCount > 0 && <button type="button" onClick={() => void uploadCoupleGalleryPhotos(slug)} disabled={coupleGalleryBusy} className="rounded bg-black px-2.5 py-1.5 text-[9px] font-semibold uppercase text-white disabled:opacity-50">Upload {queuedCount}</button>}
+                <button type="button" onClick={() => clearCouplePhotoQueue(slug)} disabled={coupleGalleryBusy} className="rounded border border-neutral-200 px-2.5 py-1.5 text-[9px] font-semibold uppercase text-neutral-600 disabled:opacity-50">Clear Queue</button>
+              </div>
+            </div>
+            {rejected.map((file) => <p key={`${file.fileName}-${file.message}`} className="mt-2 break-all text-[10px] text-red-700">{file.fileName}: {file.message}</p>)}
+            {queue.length > 0 && (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {queue.map((photo) => (
+                  <div key={photo.id} className="flex min-w-0 items-center gap-2 rounded border border-neutral-200 bg-[#fbfaf7] p-2">
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-neutral-100"><CouplePhotoPreview file={photo.file} /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[10px] text-neutral-700" title={photo.file.name}>{photo.file.name}</p>
+                      <p className={`text-[9px] font-semibold uppercase ${photo.status === 'failed' ? 'text-red-600' : photo.status === 'uploaded' ? 'text-emerald-700' : 'text-neutral-500'}`}>
+                        {photo.status === 'queued' ? 'Ready' : photo.status === 'uploading' ? `Uploading ${photo.progress}%` : photo.status === 'saving' ? 'Saving' : photo.status === 'uploaded' ? 'Uploaded' : 'Failed'}
+                      </p>
+                      {photo.error && <p className="line-clamp-1 text-[9px] text-red-600">{photo.error}</p>}
+                    </div>
+                    {!coupleGalleryBusy && photo.status !== 'uploaded' && <button type="button" onClick={() => setCouplePhotoQueues((prev) => ({ ...prev, [slug]: (prev[slug] || []).filter((item) => item.id !== photo.id) }))} aria-label={`Remove ${photo.file.name}`} className="rounded p-1 text-neutral-400 hover:text-red-600"><X size={13} /></button>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {coupleGalleryLoading ? (
+          <div className="flex min-h-28 items-center justify-center gap-2 text-xs text-neutral-500"><RefreshCw size={14} className="animate-spin" /> Loading couple photos...</div>
+        ) : photos.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-neutral-300 bg-white/50 px-3 py-8 text-center text-xs text-neutral-500">No photos added to this couple yet.</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {photos.map((photo, index) => {
+              const photoId = String(photo.id);
+              const isSelected = selectedIds.includes(photoId);
+              return (
+                <div
+                  key={photoId}
+                  draggable={!coupleGalleryBusy}
+                  onDragStart={(event) => {
+                    if ((event.target as HTMLElement).closest('button, input, label')) { event.preventDefault(); return; }
+                    event.stopPropagation();
+                    event.dataTransfer.setData('text/plain', photoId);
+                    event.dataTransfer.effectAllowed = 'move';
+                    setDraggedCouplePhotoId(photoId);
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const from = photos.findIndex((entry) => String(entry.id) === event.dataTransfer.getData('text/plain'));
+                    if (from >= 0) void moveCoupleGalleryPhoto(slug, from, index);
+                    setDraggedCouplePhotoId(null);
+                  }}
+                  onDragEnd={() => setDraggedCouplePhotoId(null)}
+                  className={`group relative overflow-hidden rounded-lg border bg-white ${isSelected ? 'border-[#9b7740] ring-2 ring-[#9b7740]/40' : 'border-neutral-200'} ${draggedCouplePhotoId === photoId ? 'opacity-40' : ''}`}
+                >
+                  <div className="relative aspect-square bg-neutral-100">
+                    <img src={photo.imageUrl} alt={photo.title || `${name} photo ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => setSelectedCouplePhotoIds((prev) => {
+                        const current = prev[slug] || [];
+                        return { ...prev, [slug]: isSelected ? current.filter((id) => id !== photoId) : [...current, photoId] };
+                      })}
+                      aria-label={`Select photo ${index + 1}`}
+                      className="absolute left-2 top-2 h-4 w-4 accent-[#9b7740]"
+                    />
+                    {replacingCouplePhotoId === photoId && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/65 px-2 text-center text-[10px] text-white">
+                        <RefreshCw size={17} className="animate-spin" /> Replacing {replacementProgress}%
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-black/65 py-1.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                      <label title="Replace photo" className={`cursor-pointer rounded bg-white/15 p-1.5 text-white hover:bg-[#9b7740] ${coupleGalleryBusy ? 'pointer-events-none opacity-50' : ''}`}>
+                        <RefreshCw size={13} />
+                        <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => { void replaceCoupleGalleryPhoto(slug, photo, event.target.files?.[0]); event.target.value = ''; }} />
+                      </label>
+                      <button type="button" title="Delete photo" aria-label={`Delete photo ${index + 1}`} onClick={() => void deleteCoupleGalleryPhoto(slug, photo.id)} disabled={coupleGalleryBusy} className="rounded bg-white/15 p-1.5 text-white hover:bg-rose-600 disabled:opacity-50">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="truncate px-2 py-1 text-[9px] text-neutral-500" title={photo.title}>{photo.title || `Photo ${index + 1}`}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -1839,6 +2528,8 @@ const HomePageManagement = () => {
               {(content.couples?.items || []).slice(0, MAX_COUPLES).map((item, index) => {
                 const isDragging = draggedCoupleIdx === index;
                 const isOver = dragOverCoupleIdx === index;
+                const gallerySlug = getCoupleGalleryKey(item);
+                const galleryCount = gallerySlug ? coupleGalleryPhotos[gallerySlug]?.length : undefined;
                 return (
                   <div
                     key={item.id || index}
@@ -1906,6 +2597,16 @@ const HomePageManagement = () => {
                             onChange={(v) => updateCoupleItem(index, 'name', v)}
                             placeholder="Kapil & Payal"
                           />
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => toggleCoupleGallery(item)}
+                              className="inline-flex items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-neutral-700 transition hover:border-[#9b7740] hover:text-[#806135]"
+                            >
+                              <ImageIcon size={13} />
+                              {activeCoupleGallery?.slug === gallerySlug ? 'Hide Photos' : 'Manage Photos'} ({galleryCount ?? 0}/{MAX_COUPLE_PHOTOS})
+                            </button>
+                          </div>
                         </div>
 
                         {/* Order controls */}
@@ -1938,7 +2639,7 @@ const HomePageManagement = () => {
                         </div>
                       </div>
                     </div>
-
+                    {activeCoupleGallery?.slug === gallerySlug && renderCoupleGallery(gallerySlug, item.name || 'Couple')}
                   </div>
                 );
               })}
@@ -2247,6 +2948,194 @@ const HomePageManagement = () => {
           </button>
         </div>
       </main>
+
+      {false && activeCoupleGallery && (() => {
+        const { slug, name } = activeCoupleGallery!;
+        const photos = coupleGalleryPhotos[slug] || [];
+        const queue = couplePhotoQueues[slug] || [];
+        const rejected = rejectedCouplePhotos[slug] || [];
+        const photosLoaded = Boolean(coupleGalleryLoaded[slug]);
+        const remaining = photosLoaded ? Math.max(0, MAX_COUPLE_PHOTOS - photos.length) : 0;
+        const queuedCount = queue.filter((photo) => photo.status === 'queued').length;
+        const failedCount = queue.filter((photo) => photo.status === 'failed').length;
+        const uploadedCount = queue.filter((photo) => photo.status === 'uploaded').length;
+
+        return (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`${name} gallery photos`}>
+            <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-neutral-200 bg-[#fbfaf7] shadow-2xl">
+              <div className="flex items-start justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
+                <div>
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[#927344]">Couple Gallery</p>
+                  <h2 className="mt-1 text-lg font-semibold text-neutral-900">{name} — Gallery Photos</h2>
+                  <p className="mt-1 text-xs text-neutral-500">{photosLoaded ? photos.length : '—'} / {MAX_COUPLE_PHOTOS} Photos</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveCoupleGallery(null)}
+                  disabled={coupleGalleryBusy}
+                  aria-label="Close couple photo manager"
+                  className="rounded-lg border border-neutral-200 bg-white p-2 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-4 sm:p-6">
+                {coupleGalleryError && (
+                  <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    <span>{coupleGalleryError}</span>
+                    {!photosLoaded && !coupleGalleryLoading && (
+                      <button type="button" onClick={() => openCoupleGallery({ id: '', name, img: '', slug })} className="font-semibold underline underline-offset-2">
+                        Retry loading photos
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (!coupleGalleryBusy && photosLoaded && remaining > 0) queueCoupleGalleryPhotos(slug, event.dataTransfer.files);
+                  }}
+                  className="mb-5 flex flex-col items-center justify-between gap-4 rounded-lg border-2 border-dashed border-[#cfc5b4] bg-white/70 px-4 py-5 text-center sm:flex-row sm:text-left"
+                >
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-700">Add Photos to {name}</h3>
+                    <p className="mt-1 text-[11px] text-neutral-500">Choose or drop multiple photos to upload them together.</p>
+                    <p className="mt-1 text-[10px] text-neutral-400">JPG, JPEG, PNG, WEBP · up to 25 MiB per photo</p>
+                    {!photosLoaded && <p className="mt-2 text-xs text-amber-700">The current album count must load before uploads are enabled.</p>}
+                    {photosLoaded && remaining === 0 && <p className="mt-2 text-xs font-semibold text-red-600">Maximum 40 photos reached.</p>}
+                  </div>
+                  <label className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-white ${!photosLoaded || remaining === 0 || coupleGalleryBusy ? 'cursor-not-allowed bg-neutral-400' : 'cursor-pointer bg-[#9b7740] hover:bg-[#856535]'}`}>
+                    <Plus size={15} />
+                    {!photosLoaded ? 'Count Unavailable' : remaining === 0 ? 'Gallery Full' : 'Upload Photos'}
+                    {photosLoaded && remaining > 0 && !coupleGalleryBusy && (
+                      <input
+                        type="file"
+                        multiple
+                        accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(event) => {
+                          queueCoupleGalleryPhotos(slug, event.target.files);
+                          event.target.value = '';
+                        }}
+                      />
+                    )}
+                  </label>
+                </div>
+
+                {(queue.length > 0 || rejected.length > 0) && (
+                  <div className="mb-5 rounded-lg border border-neutral-200 bg-white p-3 sm:p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-700">
+                          {coupleGalleryBusy ? 'Processing selected photos' : `${queue.length} selected photos`}
+                        </p>
+                        <p className="mt-1 text-[11px] text-neutral-500">{queuedCount} ready · {uploadedCount} uploaded · {failedCount} failed</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {failedCount > 0 && (
+                          <button type="button" onClick={() => uploadCoupleGalleryPhotos(slug, true)} disabled={coupleGalleryBusy} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-amber-800 disabled:opacity-50">
+                            Retry Failed ({failedCount})
+                          </button>
+                        )}
+                        {queuedCount > 0 && (
+                          <button type="button" onClick={() => uploadCoupleGalleryPhotos(slug)} disabled={coupleGalleryBusy} className="rounded bg-black px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white disabled:opacity-50">
+                            Upload {queuedCount} Photos
+                          </button>
+                        )}
+                        <button type="button" onClick={() => clearCouplePhotoQueue(slug)} disabled={coupleGalleryBusy} className="rounded border border-neutral-200 bg-white px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-600 disabled:opacity-50">
+                          Clear Queue
+                        </button>
+                      </div>
+                    </div>
+
+                    {rejected.length > 0 && (
+                      <div className="mt-3 space-y-1 rounded border border-red-100 bg-red-50 p-2">
+                        {rejected.map((file) => (
+                          <p key={`${file.fileName}-${file.message}`} className="break-all text-[10px] text-red-700">
+                            <span className="font-semibold">{file.fileName}</span>: {file.message}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {queue.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {queue.map((photo) => (
+                          <div key={photo.id} className="flex min-w-0 gap-2 rounded border border-neutral-200 bg-[#fbfaf7] p-2">
+                            <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-neutral-100">
+                              <CouplePhotoPreview file={photo.file} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[10px] font-medium text-neutral-700" title={photo.file.name}>{photo.file.name}</p>
+                              <p className={`mt-1 text-[9px] font-semibold uppercase ${photo.status === 'failed' ? 'text-red-600' : photo.status === 'uploaded' ? 'text-emerald-700' : 'text-neutral-500'}`}>
+                                {photo.status === 'queued' ? 'Ready' : photo.status === 'uploading' ? `Uploading ${photo.progress}%` : photo.status === 'saving' ? 'Saving' : photo.status === 'uploaded' ? 'Uploaded' : 'Failed'}
+                              </p>
+                              {photo.error && <p className="mt-1 line-clamp-2 text-[9px] text-red-600">{photo.error}</p>}
+                            </div>
+                            {!coupleGalleryBusy && photo.status !== 'uploaded' && (
+                              <button
+                                type="button"
+                                onClick={() => setCouplePhotoQueues((prev) => ({ ...prev, [slug]: (prev[slug] || []).filter((item) => item.id !== photo.id) }))}
+                                aria-label={`Remove ${photo.file.name} from upload queue`}
+                                className="self-start rounded p-1 text-neutral-400 transition hover:bg-red-50 hover:text-red-600"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-700">Existing Gallery Photos</h3>
+                  {coupleGalleryLoading && <RefreshCw size={15} className="animate-spin text-[#9b7740]" />}
+                </div>
+
+                {coupleGalleryLoading ? (
+                  <div className="flex min-h-36 items-center justify-center gap-2 text-xs text-neutral-500">
+                    <RefreshCw size={15} className="animate-spin text-[#9b7740]" /> Loading photos...
+                  </div>
+                ) : photos.length === 0 ? (
+                  <div className="rounded-lg border-2 border-dashed border-neutral-200 bg-white/50 px-4 py-10 text-center">
+                    <ImageIcon size={28} className="mx-auto mb-2 text-neutral-300" />
+                    <p className="text-xs text-neutral-500">No photos added to this gallery yet.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {photos.map((photo, index) => (
+                      <div key={photo.id} className="group overflow-hidden rounded-lg border border-neutral-200 bg-white">
+                        <div className="relative aspect-square bg-neutral-100">
+                          <img src={photo.imageUrl} alt={photo.title || `${name} photo ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                          <div className="absolute inset-x-0 bottom-0 flex justify-between bg-black/65 p-1.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                            <div className="flex gap-1">
+                              <button type="button" title="Move earlier" aria-label={`Move photo ${index + 1} earlier`} onClick={() => moveCoupleGalleryPhoto(slug, index, -1)} disabled={coupleGalleryBusy || index === 0} className="rounded bg-white/15 p-1 text-white disabled:opacity-40">
+                                <ArrowUp size={13} />
+                              </button>
+                              <button type="button" title="Move later" aria-label={`Move photo ${index + 1} later`} onClick={() => moveCoupleGalleryPhoto(slug, index, 1)} disabled={coupleGalleryBusy || index === photos.length - 1} className="rounded bg-white/15 p-1 text-white disabled:opacity-40">
+                                <ArrowDown size={13} />
+                              </button>
+                            </div>
+                            <button type="button" title="Delete photo" aria-label={`Delete photo ${index + 1}`} onClick={() => deleteCoupleGalleryPhoto(slug, photo.id)} disabled={coupleGalleryBusy} className="rounded bg-rose-600 p-1 text-white disabled:opacity-50">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="truncate px-2 py-1.5 text-[9px] text-neutral-500" title={photo.title}>{photo.title || `Photo ${index + 1}`}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

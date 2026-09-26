@@ -66,6 +66,17 @@ interface HomeApiContent {
   home?: Partial<HomeContent>;
 }
 
+function createCoupleSlug(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+const COUPLE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 /* =========================================================
    API
 ========================================================= */
@@ -475,7 +486,12 @@ function mergeHomeContent(
       ...(apiHome.couples || {}),
       items:
         Array.isArray(apiHome.couples?.items)
-          ? apiHome.couples.items
+          ? apiHome.couples.items.map((item) => ({
+              ...item,
+              slug: item.slug && COUPLE_SLUG_PATTERN.test(item.slug.trim())
+                ? item.slug.trim()
+                : createCoupleSlug(item.name || ''),
+            }))
           : [],
     },
 
@@ -1658,13 +1674,8 @@ useEffect(() => {
           {/* Changed to 3 columns on mobile and desktop (3 by 3 layout) */}
           <FadeIn className="grid grid-cols-3 gap-x-2 gap-y-4 sm:gap-x-6 sm:gap-y-8 lg:gap-x-10 lg:gap-y-10 max-w-6xl mx-auto">
             {couplesToRender.map((couple, index) => {
-              return (
-                <Link
-                  key={couple.id || `couple-${index}`}
-                  to="/gallery"
-                  className="group cursor-pointer block"
-                  style={{ textDecoration: 'none', color: 'inherit' }}
-                >
+              const cardContent = (
+                <>
                   <div className="relative overflow-hidden bg-black aspect-[94/100] mb-2 sm:mb-3">
                     {couple.img ? (
                       <img
@@ -1691,7 +1702,26 @@ useEffect(() => {
                       {couple.name}
                     </h3>
                   </div>
+                </>
+              )
+
+              return couple.slug ? (
+                <Link
+                  key={couple.id || `couple-${index}`}
+                  to={`/gallery/${couple.slug}`}
+                  className="group cursor-pointer block"
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  {cardContent}
                 </Link>
+              ) : (
+                <div
+                  key={couple.id || `couple-${index}`}
+                  className="group block"
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  {cardContent}
+                </div>
               )
             })}
           </FadeIn>

@@ -64,6 +64,7 @@ const MAX_GALLERY_CARDS = 16;
 const MAX_COUPLES_CARDS = 12;
 const MAX_RECENT_CARDS = 4;
 const MAX_PHOTOS_PER_CARD = 500;
+const MAX_HOME_COUPLE_PHOTOS = 40;
 
 
 /* =========================================================
@@ -118,6 +119,47 @@ function getGalleryMetadata(PDO $pdo): array
     return is_array($gallery)
         ? $gallery
         : [];
+}
+
+
+/**
+ * Find a saved Home couple by its stable slug or stored ID.
+ */
+function findHomeCoupleByIdentifier(PDO $pdo, string $identifier): ?array
+{
+    $stmt = $pdo->query(
+        '
+        SELECT home
+        FROM website_content
+        WHERE id = 1
+        LIMIT 1
+        '
+    );
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $home = is_array($row) ? json_decode((string) ($row['home'] ?? ''), true) : null;
+    $items = is_array($home) ? ($home['couples']['items'] ?? []) : [];
+
+    if (!is_array($items)) {
+        return null;
+    }
+
+    foreach ($items as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $itemSlug = trim((string) ($item['slug'] ?? ''));
+        if ($itemSlug === '') {
+            $name = strtolower(trim((string) ($item['name'] ?? '')));
+            $itemSlug = trim((string) preg_replace('/[^a-z0-9]+/', '-', $name), '-');
+        }
+
+        if ((string) ($item['id'] ?? '') === $identifier || $itemSlug === $identifier) {
+            return $item;
+        }
+    }
+
+    return null;
 }
 
 
@@ -226,6 +268,10 @@ function normalizeSection(
         return 'recentAlbums';
     }
 
+    if ($section === 'homeCouples') {
+        return 'homeCouples';
+    }
+
     return 'couples';
 }
 
@@ -242,7 +288,22 @@ function buildCategory(
         return 'recent:' . $slug;
     }
 
+    if ($section === 'homeCouples') {
+        return 'home-couple:' . $slug;
+    }
+
     return 'gallery:' . $slug;
+}
+
+
+/**
+ * Return the media limit for a category.
+ */
+function getGalleryPhotoLimit(string $category): int
+{
+    return str_starts_with($category, 'home-couple:')
+        ? MAX_HOME_COUPLE_PHOTOS
+        : MAX_PHOTOS_PER_CARD;
 }
 
 
@@ -260,6 +321,10 @@ function getSectionFromCategory(
         )
     ) {
         return 'recentAlbums';
+    }
+
+    if (str_starts_with($category, 'home-couple:')) {
+        return 'homeCouples';
     }
 
     return 'couples';
@@ -643,47 +708,25 @@ try {
         ================================================= */
 
         if ($slug !== '') {
+            $requestedSection = normalizeSection($_GET['section'] ?? null);
+            $hasExplicitSection = isset($_GET['section']) && trim((string) $_GET['section']) !== '';
+            $homeCouple = findHomeCoupleByIdentifier($pdo, $slug);
 
-            $album =
-                findAlbumBySlug(
-                    $pdo,
-                    $slug
-                );
-
-
-            /*
-             * Determine category even if metadata
-             * is temporarily missing.
-             */
-            if ($album) {
-
-                $section =
-                    $album['_section']
-                    ?? 'couples';
-
-                $category =
-                    buildCategory(
-                        $section,
-                        $slug
-                    );
-
+            if ($requestedSection === 'homeCouples' || (!$hasExplicitSection && $homeCouple)) {
+                $album = $homeCouple;
+                $section = 'homeCouples';
+                $homeCoupleKey = trim((string) ($homeCouple['id'] ?? '')) ?: $slug;
+                $category = buildCategory($section, $homeCoupleKey);
             } else {
+                $album = findAlbumBySlug($pdo, $slug);
 
-                /*
-                 * Support explicit section query:
-                 * ?slug=xxx&section=recentAlbums
-                 */
-                $section =
-                    normalizeSection(
-                        $_GET['section']
-                        ?? null
-                    );
-
-                $category =
-                    buildCategory(
-                        $section,
-                        $slug
-                    );
+                if ($album) {
+                    $section = $album['_section'] ?? 'couples';
+                    $category = buildCategory($section, $slug);
+                } else {
+                    $section = $requestedSection;
+                    $category = buildCategory($section, $slug);
+                }
             }
 
 
@@ -753,7 +796,7 @@ try {
                         count($photos),
 
                     'maxPhotos' =>
-                        MAX_PHOTOS_PER_CARD,
+                        getGalleryPhotoLimit($category),
                 ],
                 200
             );
@@ -1636,9 +1679,8 @@ try {
                     );
 
 
-                $remaining =
-                    MAX_PHOTOS_PER_CARD -
-                    $currentCount;
+                $limit = getGalleryPhotoLimit($category);
+                $remaining = $limit - $currentCount;
 
 
                 if (
@@ -1648,7 +1690,7 @@ try {
 
                     errorResponse(
                         "Maximum " .
-                        MAX_PHOTOS_PER_CARD .
+                        $limit .
                         " photos allowed for category '" .
                         $category .
                         "'. " .
@@ -2042,14 +2084,12 @@ try {
             );
 
 
-        if (
-            $currentCount >=
-            MAX_PHOTOS_PER_CARD
-        ) {
+        $limit = getGalleryPhotoLimit($category);
+        if ($currentCount >= $limit) {
 
             errorResponse(
                 'Maximum ' .
-                MAX_PHOTOS_PER_CARD .
+                $limit .
                 ' photos reached for this album.',
                 400
             );
@@ -3123,7 +3163,8 @@ try {
                 '
                 SELECT
                     id,
-                    category
+                    category,
+                    image_url AS imageUrl
                 FROM gallery_media
                 WHERE id = :id
                 LIMIT 1
@@ -3326,14 +3367,12 @@ try {
                     );
 
 
-                if (
-                    $destinationCount >=
-                    MAX_PHOTOS_PER_CARD
-                ) {
+                $destinationLimit = getGalleryPhotoLimit($newCategory);
+                if ($destinationCount >= $destinationLimit) {
 
                     errorResponse(
                         'Destination album already has maximum ' .
-                        MAX_PHOTOS_PER_CARD .
+                        $destinationLimit .
                         ' photos.',
                         400
                     );
@@ -3479,6 +3518,13 @@ try {
         $stmt->execute(
             $params
         );
+
+        if (
+            array_key_exists(':image_url', $params) &&
+            (string) $currentMedia['imageUrl'] !== (string) $params[':image_url']
+        ) {
+            deleteMediaFileByUrl((string) $currentMedia['imageUrl']);
+        }
 
 
         jsonResponse(
