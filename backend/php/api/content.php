@@ -75,19 +75,19 @@ const MAX_GALLERY_CARDS = 28;
 const MAX_WEDDING_ALBUMS = 12;
 const MAX_ENGAGEMENT_ALBUMS = 8;
 const MAX_PRE_WEDDING_ALBUMS = 8;
-const MAX_FILMS = 24;
+const MAX_FILMS = 32;
 
 const ALLOWED_FILM_CATEGORIES = [
-    "Recent Cinema",
-    "Wedding Films",
-    "Pre Wedding Stories",
+    "Wedding Film",
+    "Engagement",
+    "Prewedding",
     "Reels",
 ];
 
 const FILM_CATEGORY_LIMITS = [
-    'Recent Cinema' => 4,
-    'Wedding Films' => 8,
-    'Pre Wedding Stories' => 4,
+    'Wedding Film' => 8,
+    'Engagement' => 8,
+    'Prewedding' => 8,
     'Reels' => 8,
 ];
 
@@ -638,8 +638,17 @@ function normalizeFilmCategory($category): ?string
     $normalized = preg_replace('/[^a-z0-9]+/', '-', $normalized) ?? '';
     $normalized = trim($normalized, '-');
 
-    if ($normalized === 'cinematic-stories') {
-        return 'Pre Wedding Stories';
+    $legacyCategories = [
+        'recent-cinema' => 'Wedding Film',
+        'wedding-films' => 'Engagement',
+        'pre-wedding-stories' => 'Prewedding',
+        'cinematic-stories' => 'Prewedding',
+        'wedding-film' => 'Wedding Film',
+        'prewedding' => 'Prewedding',
+    ];
+
+    if (isset($legacyCategories[$normalized])) {
+        return $legacyCategories[$normalized];
     }
 
     foreach (ALLOWED_FILM_CATEGORIES as $allowedCategory) {
@@ -692,7 +701,7 @@ function validateFilmCategoryLimits(array $items): void
 /**
  * Normalize and validate the Films section.
  *
- * Total maximum = 16, distributed across the three film categories.
+ * Total maximum = 32, distributed across the four film categories.
  */
 function normalizeAndValidateFilms(array $films, bool $rejectInvalidCategories = true): array
 {
@@ -738,7 +747,7 @@ function normalizeAndValidateFilms(array $films, bool $rejectInvalidCategories =
                 ($normalizedFilm['title'] ?: 'Untitled Film') .
                 '". Received: "' .
                 (is_scalar($normalizedFilm['category']) ? (string) $normalizedFilm['category'] : gettype($normalizedFilm['category'])) .
-                '". Allowed categories: Recent Cinema, Wedding Films, Pre Wedding Stories, Reels.',
+                '". Allowed categories: Wedding Film, Engagement, Prewedding, Reels.',
                 400
             );
         }
@@ -1123,7 +1132,7 @@ try {
 
            Films are stored inside website_content.gallery.films.
            Hero Video is independent. Only films.items count
-           toward MAX_FILMS = 24. Category distribution is validated below.
+           toward MAX_FILMS = 32. Category distribution is validated below.
         ------------------------------------------------- */
 
         $filmsData =

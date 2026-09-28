@@ -37,7 +37,7 @@ interface FilmsContent {
   statementText: string;
 }
 
-type FilmCategory = "All" | "Recent Cinema" | "Wedding Films" | "Pre Wedding Stories" | "Reels";
+type FilmCategory = (typeof FILM_CATEGORY_DEFINITIONS)[number]["label"];
 
 /* =========================================================
    API
@@ -221,9 +221,17 @@ function VideoModal({
   film,
   onClose,
 }: VideoModalProps) {
+  const reelPlayerRef = useRef<HTMLDivElement | null>(null);
+  const [isReelFullscreen, setIsReelFullscreen] = useState(false);
+  const isReel = normalizeFilmCategory(film?.category) === "reels";
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (document.fullscreenElement === reelPlayerRef.current) {
+          void document.exitFullscreen();
+          return;
+        }
         onClose();
       }
     };
@@ -247,13 +255,40 @@ function VideoModal({
     };
   }, [onClose]);
 
+ useEffect(() => {
+  const syncFullscreenState = () => {
+    setIsReelFullscreen(document.fullscreenElement === reelPlayerRef.current);
+  };
+
+  document.addEventListener("fullscreenchange", syncFullscreenState);
+
+  return () => {
+    document.removeEventListener("fullscreenchange", syncFullscreenState);
+  };
+}, []);
+
+  const toggleReelFullscreen = async () => {
+    const player = reelPlayerRef.current;
+    if (!player) return;
+
+    try {
+      if (document.fullscreenElement === player) {
+        await document.exitFullscreen();
+      } else {
+        await player.requestFullscreen();
+      }
+    } catch (error) {
+      console.error("Could not toggle Reel fullscreen:", error);
+    }
+  };
+
   if (!film) {
     return null;
   }
 
   return (
     <motion.div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md md:p-8"
+      className={`fixed inset-0 z-[100] flex items-center justify-center ${normalizeFilmCategory(film.category) === "reels" ? "bg-black/50" : "bg-black/95 backdrop-blur-md"} p-4 md:p-8`}
       initial={{
         opacity: 0,
       }}
@@ -268,6 +303,17 @@ function VideoModal({
       }}
       onClick={onClose}
     >
+      {isReel && film.videoUrl && (
+        <video
+          src={film.videoUrl}
+          autoPlay
+          muted
+          loop
+          playsInline
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl"
+        />
+      )}
       <button
         onClick={onClose}
         className="absolute right-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-[#9B7740] hover:text-black md:right-8 md:top-8"
@@ -277,6 +323,7 @@ function VideoModal({
 
       <motion.div
         className="relative w-full max-w-5xl"
+        
         initial={{
           scale: 0.9,
           opacity: 0,
@@ -293,17 +340,63 @@ function VideoModal({
           e.stopPropagation()
         }
       >
-        <div className={`${normalizeFilmCategory(film.category) === "reels" ? "mx-auto aspect-[9/16] max-h-[85vh] max-w-sm" : "aspect-video w-full"} overflow-hidden bg-black shadow-2xl`}>
-          {film.videoUrl && (
-            <video
-              src={film.videoUrl}
-              controls
-              autoPlay
-              preload="metadata"
-              className="h-full w-full object-contain"
-            />
-          )}
-        </div>
+<div
+  ref={isReel ? reelPlayerRef : undefined}
+  className={`${isReel
+    ? isReelFullscreen
+      ? "fixed inset-0 z-[110] flex items-center justify-center overflow-hidden bg-black"
+      : "relative mx-auto aspect-[9/16] w-[min(92vw,calc(92dvh*9/16))] overflow-hidden bg-black shadow-2xl"
+    : "aspect-video w-full overflow-hidden bg-black shadow-2xl"
+  }`}
+>
+  {isReel && isReelFullscreen && film.videoUrl && (
+    <video
+      src={film.videoUrl}
+      autoPlay
+      muted
+      loop
+      playsInline
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl"
+    />
+  )}
+
+  {film.videoUrl && (
+    <video
+      src={film.videoUrl}
+      controls={!isReelFullscreen}
+      controlsList={isReel ? "nofullscreen,noremoteplayback" : undefined}
+      disablePictureInPicture={isReel}
+      autoPlay
+      preload="metadata"
+      playsInline
+     className={
+  isReel
+    ? isReelFullscreen
+      ? "reel-video relative z-10 h-full w-full object-contain"
+      : "reel-video relative z-10 h-full w-full aspect-[9/16] object-contain"
+    : "h-full w-full object-contain"
+}
+    />
+  )}
+
+  {isReel && (
+    <button
+      type="button"
+      onClick={toggleReelFullscreen}
+      aria-label={
+        isReelFullscreen ? "Exit fullscreen Reel" : "Fullscreen Reel"
+      }
+      className={`absolute z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition hover:bg-[#9B7740] hover:text-black ${
+        isReelFullscreen
+          ? "right-4 top-4"
+          : "bottom-4 right-4"
+      }`}
+    >
+      <Maximize2 size={18} />
+    </button>
+  )}
+</div>
       </motion.div>
     </motion.div>
   );
@@ -439,13 +532,19 @@ function FilmCard({
   }, [film.videoUrl]);
 
   // When activated, imperatively enable controls and unmute
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !isActivated) return;
+ useEffect(() => {
+  const video = videoRef.current;
+  if (!video || !isActivated) return;
+
+  if (!vertical) {
     video.controls = true;
-    video.loop = false;
-    video.muted = false;
-  }, [isActivated]);
+  }
+  video.loop = false;
+  video.muted = false;
+
+  // Remove native fullscreen button from video controls
+ 
+}, [isActivated, vertical]);
 
   const handleCardClick = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
@@ -465,7 +564,9 @@ function FilmCard({
       // First click: activate — unmute, show controls, play from start
       setIsActivated(true);
       video.muted = false;
-      video.controls = true;
+      if (!vertical) {
+        video.controls = true;
+      }
       video.loop = false;
       video.currentTime = 0;
       video.play().catch(() => { });
@@ -479,9 +580,12 @@ function FilmCard({
     }
   };
 
-  // Prevent native controls clicks from bubbling to the parent div (double-toggle fix)
+  // Reels (no native controls): let clicks bubble up so play/pause toggles anywhere.
+  // Non-Reels (native controls visible once activated): stop the click here so the
+  // native control (play/pause, seek, volume, fullscreen) isn't immediately undone
+  // by the card's own toggle logic firing on the same click.
   const handleVideoClick = (e: React.MouseEvent<HTMLVideoElement>) => {
-    if (isActivated) {
+    if (isActivated && !vertical) {
       e.stopPropagation();
     }
   };
@@ -494,7 +598,7 @@ function FilmCard({
   return (
     <motion.article
       ref={articleRef}
-      className="group cursor-pointer"
+   
       initial={{
         opacity: 0,
         y: 30,
@@ -517,7 +621,7 @@ function FilmCard({
       }}
     >
       <div
-        className={`relative ${vertical ? "aspect-[9/16]" : "aspect-video"} overflow-hidden bg-black transition-all duration-500 group-hover:shadow-2xl`}
+        className={`relative ${vertical ? "aspect-square" : "aspect-video"} overflow-hidden bg-black transition-all duration-500 group-hover:shadow-2xl`}
         onClick={
           handleCardClick
         }
@@ -529,6 +633,8 @@ function FilmCard({
             muted
             loop
             playsInline
+            controlsList={vertical ? "nofullscreen nodownload noremoteplayback" : "nodownload noremoteplayback"}
+            disablePictureInPicture
             poster={film.thumbnailUrl || undefined}
             preload={shouldLoadVideo ? "metadata" : "none"}
             onLoadedData={() => setIsLoading(false)}
@@ -555,14 +661,14 @@ function FilmCard({
           </div>
         )}
 
-        {!isActivated &&
+        {vertical &&
           film.videoUrl &&
           !hasError && (
             <button
               onClick={
                 handleExpandClick
               }
-              className="absolute right-3 top-3 z-20 flex h-9 w-9 scale-90 items-center justify-center rounded-full bg-black/40 text-white opacity-0 backdrop-blur-sm transition-all duration-300 group-hover:scale-100 group-hover:opacity-100 hover:bg-[#9B7740]"
+              className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-all duration-300 hover:bg-[#9B7740]"
               aria-label="Fullscreen"
             >
               <Maximize2 size={14} />
@@ -629,7 +735,7 @@ function Films() {
   const [
     activeFilter,
     setActiveFilter,
-  ] = useState<FilmCategory>("All");
+  ] = useState<FilmCategory>(FILM_CATEGORY_DEFINITIONS[0].label);
 
   const [
     selectedFilm,
@@ -711,7 +817,6 @@ function Films() {
   ======================================================= */
 
   const filters: FilmCategory[] = [
-    "All",
     ...FILM_CATEGORY_DEFINITIONS.map((category) => category.label),
   ];
 
@@ -734,10 +839,6 @@ function Films() {
           typeof film.videoUrl === "string" &&
           film.videoUrl.trim().length > 0
       );
-
-      if (activeFilter === "All") {
-        return visibleItems;
-      }
 
       const filteredItems = visibleItems.filter(
         (film) => normalizeFilmCategory(film.category) === normalizeFilmCategory(activeFilter)

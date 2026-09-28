@@ -39,11 +39,11 @@ const FILM_CATEGORIES: FilmCategory[] = [
 ];
 const FILM_CATEGORY_SET = new Set<string>(FILM_CATEGORIES);
 
-const MAX_FILMS = 24;
+const MAX_FILMS = 32;
 const FILM_CATEGORY_LIMITS: Record<FilmCategory, number> = {
-    "Recent Cinema": 4,
-    "Wedding Films": 8,
-    "Pre Wedding Stories": 4,
+    "Wedding Film": 8,
+    "Engagement": 8,
+    "Prewedding": 8,
     "Reels": 8,
 };
 
@@ -66,7 +66,7 @@ const canonicalFilmCategory = (value: unknown): FilmCategory | null => {
 
    Films are managed by PHP/MySQL.
    No local/demo films are seeded here.
-   Hero Video is separate from the 16-film limit.
+    Hero Video is separate from the 32-film limit.
 ========================================================= */
 
 const DEFAULT_FILMS: FilmsContent = {
@@ -828,7 +828,7 @@ const FilmManagement = () => {
 
             if (invalidFilm) {
                 throw new Error(
-                    `Invalid category "${String(invalidFilm.category)}" for film "${invalidFilm.title || "Untitled Film"}". Please select Recent Cinema, Wedding Films, Pre Wedding Stories or Reels.`
+                    `Invalid category "${String(invalidFilm.category)}" for film "${invalidFilm.title || "Untitled Film"}". Please select Wedding Film, Engagement, Prewedding or Reels.`
                 );
             }
 
@@ -837,7 +837,7 @@ const FilmManagement = () => {
                     ...counts,
                     [category]: actualFilms.filter((film) => isFilmInCategory(film, category)).length,
                 }),
-                { "Recent Cinema": 0, "Wedding Films": 0, "Pre Wedding Stories": 0, "Reels": 0 }
+                { "Wedding Film": 0, "Engagement": 0, "Prewedding": 0, "Reels": 0 }
             );
             const overLimitCategory = FILM_CATEGORIES.find(
                 (category) =>
@@ -861,7 +861,7 @@ const FilmManagement = () => {
                 return {
                     ...film,
                     isDraft: undefined,
-                    category: category || "Recent Cinema",
+                    category: category || "Wedding Film",
                     order: index,
                 };
             });
@@ -1814,7 +1814,7 @@ const FilmManagement = () => {
                                                 </label>
 
                                                 <select
-                                                    value={canonicalFilmCategory(film.category) || "Recent Cinema"}
+                                                    value={canonicalFilmCategory(film.category) || "Wedding Film"}
                                                     onChange={(e) =>
                                                         updateFilm(
                                                             index,
@@ -1905,7 +1905,7 @@ const FilmManagement = () => {
                                     : `Add another film (${MAX_FILMS - actualFilmCount} slots remaining)`}
                             </p>
                             <p className="mt-1 text-xs text-black/45">
-                                Category capacity: Recent Cinema 4, Wedding Films 8, Pre Wedding Stories 4, Reels 8. Deleting a film frees its slot.
+                                Category capacity: Wedding Film 8, Engagement 8, Prewedding 8, Reels 8. Deleting a film frees its slot.
                             </p>
                         </div>
 

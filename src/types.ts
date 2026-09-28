@@ -109,13 +109,13 @@ export interface BlogContent {
   posts: BlogPost[];
 }
 
-export type FilmCategory = 'Recent Cinema' | 'Wedding Films' | 'Pre Wedding Stories' | 'Reels';
-export type FilmCategoryId = 'recent-cinema' | 'wedding-films' | 'pre-wedding-stories' | 'reels';
+export type FilmCategory = 'Wedding Film' | 'Engagement' | 'Prewedding' | 'Reels';
+export type FilmCategoryId = 'wedding-film' | 'engagement' | 'prewedding' | 'reels';
 
 export const FILM_CATEGORY_DEFINITIONS = [
-  { id: 'recent-cinema', label: 'Recent Cinema', limit: 4 },
-  { id: 'wedding-films', label: 'Wedding Films', limit: 8 },
-  { id: 'pre-wedding-stories', label: 'Pre Wedding Stories', limit: 4 },
+  { id: 'wedding-film', label: 'Wedding Film', limit: 8 },
+  { id: 'engagement', label: 'Engagement', limit: 8 },
+  { id: 'prewedding', label: 'Prewedding', limit: 8 },
   { id: 'reels', label: 'Reels', limit: 8 },
 ] as const;
 
@@ -125,8 +125,15 @@ export function normalizeFilmCategory(value: unknown): FilmCategoryId | null {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-');
 
-  if (normalized === 'cinematic-stories') {
-    return 'pre-wedding-stories';
+  const legacyCategories: Record<string, FilmCategoryId> = {
+    'recent-cinema': 'wedding-film',
+    'wedding-films': 'engagement',
+    'pre-wedding-stories': 'prewedding',
+    'cinematic-stories': 'prewedding',
+  };
+
+  if (legacyCategories[normalized]) {
+    return legacyCategories[normalized];
   }
 
   return FILM_CATEGORY_DEFINITIONS.find(
