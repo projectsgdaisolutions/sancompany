@@ -14,7 +14,7 @@ import AlbumDetail from "./AlbumDetail";
 const API_BASE_URL = API_URL;
 
 /* =========================================================
-   DEFAULT COUPLES
+  DEFAULT WEDDING ALBUMS
 ========================================================= */
 
 interface GalleryAlbum extends GalleryCouple {
@@ -27,8 +27,11 @@ interface GalleryContent {
   heroHeadingLine1: string;
   heroHeadingLine2: string;
   heroDescription: string;
-  couples: GalleryAlbum[];
-  recentAlbums: GalleryAlbum[];
+  wedding: GalleryAlbum[];
+  engagement: GalleryAlbum[];
+  preWedding: GalleryAlbum[];
+  couples?: GalleryAlbum[];
+  recentAlbums?: GalleryAlbum[];
   ctaEyebrow: string;
   ctaHeadingLine1: string;
   ctaHeadingLine2: string;
@@ -37,7 +40,7 @@ interface GalleryContent {
   ctaButtonHref: string;
 }
 
-const DEFAULT_COUPLES: GalleryAlbum[] = [
+const DEFAULT_WEDDING_ALBUMS: GalleryAlbum[] = [
   {
     id: 1,
     slug: "kapil-payal",
@@ -72,11 +75,12 @@ const DEFAULT_GALLERY: GalleryContent = {
   heroDescription:
     "A visual diary of timeless moments. Browse through our collection of iconic wedding frames, raw emotions, and beautiful details that capture the essence of every celebration.",
 
-  couples: DEFAULT_COUPLES.map((couple, index) => ({
+  wedding: DEFAULT_WEDDING_ALBUMS.map((couple, index) => ({
     ...couple,
     order: index,
   })),
-  recentAlbums: [],
+  engagement: [],
+  preWedding: [],
 
   ctaEyebrow: "SAN Photography",
   ctaHeadingLine1: "Your story.",
@@ -91,34 +95,14 @@ const DEFAULT_GALLERY: GalleryContent = {
    MERGE GALLERY
 ========================================================= */
 
-const DEFAULT_RECENT_ALBUMS: GalleryAlbum[] = [];
-const MAX_PUBLIC_ALL_ALBUMS = 12;
-
-function normalizeCouples(savedCouples: unknown): GalleryAlbum[] {
-  if (!Array.isArray(savedCouples)) {
-    return DEFAULT_COUPLES.slice(0, 12);
+function normalizeAlbums(savedAlbums: unknown, fallback: GalleryAlbum[] = []): GalleryAlbum[] {
+  if (!Array.isArray(savedAlbums)) {
+    return fallback;
   }
 
-  return savedCouples
-    .map((couple: Partial<GalleryAlbum>, index: number) => ({
-      id: couple?.id ?? `couple-${index}`,
-      slug: couple?.slug ?? "",
-      name: couple?.name ?? "",
-      location: couple?.location ?? "",
-      image: couple?.image ?? "",
-      order: typeof couple?.order === "number" ? couple.order : index,
-    }))
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-}
-
-function normalizeRecentAlbums(savedRecent: unknown): GalleryAlbum[] {
-  if (!Array.isArray(savedRecent)) {
-    return DEFAULT_RECENT_ALBUMS;
-  }
-
-  return savedRecent
+  return savedAlbums
     .map((album: Partial<GalleryAlbum>, index: number) => ({
-      id: album?.id ?? `recent-${index}`,
+      id: album?.id ?? `album-${index}`,
       slug: album?.slug ?? "",
       name: album?.name ?? "",
       location: album?.location ?? "",
@@ -142,8 +126,9 @@ function mergeGallery(remote: Partial<GalleryContent> | null): GalleryContent {
       remote.heroHeadingLine2 ?? DEFAULT_GALLERY.heroHeadingLine2,
     heroDescription:
       remote.heroDescription ?? DEFAULT_GALLERY.heroDescription,
-    couples: normalizeCouples(remote.couples),
-    recentAlbums: normalizeRecentAlbums(remote.recentAlbums),
+    wedding: normalizeAlbums(remote.wedding ?? remote.couples, DEFAULT_WEDDING_ALBUMS),
+    engagement: normalizeAlbums(remote.engagement ?? remote.recentAlbums),
+    preWedding: normalizeAlbums(remote.preWedding),
     ctaEyebrow:
       remote.ctaEyebrow ?? DEFAULT_GALLERY.ctaEyebrow,
     ctaHeadingLine1:
@@ -363,7 +348,7 @@ function RevealHeading({
 }
 
 /* =========================================================
-   ALBUM CARD (GALLERY ALBUM & RECENT ALBUM)
+  GALLERY ALBUM CARD
 ========================================================= */
 
 interface AlbumCardProps {
@@ -459,14 +444,14 @@ function Gallery() {
 
   const { slug } = useParams();
   const [galleryContent, setGalleryContent] = useState<GalleryContent>(DEFAULT_GALLERY);
-  const [activeFilter, setActiveFilter] = useState<"All" | "Recent">("All");
+  const [activeFilter, setActiveFilter] = useState<"wedding" | "engagement" | "preWedding">("wedding");
 
   useEffect(() => {
     if (slug) return;
 
     let isMounted = true;
 
-    // Fetch Gallery metadata (couples + recentAlbums) from PHP API
+    // Fetch Gallery metadata from PHP API
     const fetchGalleryContent = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/content.php`, { cache: 'no-store' });
@@ -498,8 +483,6 @@ function Gallery() {
     heroHeadingLine1,
     heroHeadingLine2,
     heroDescription,
-    couples,
-    recentAlbums = [],
     ctaEyebrow,
     ctaHeadingLine1,
     ctaHeadingLine2,
@@ -508,19 +491,12 @@ function Gallery() {
     ctaButtonHref,
   } = galleryContent;
 
-  const filters: Array<"All" | "Recent"> = ["All", "Recent"];
-
-  const getAlbumKey = (album: GalleryAlbum) =>
-    String(album?.id ?? album?.slug ?? "").trim();
-
-  const publicRecentAlbums = recentAlbums;
-  const publicAllAlbums = [
-    ...publicRecentAlbums,
-    ...couples,
-  ].filter((album: GalleryAlbum, index: number, albums: GalleryAlbum[]) => {
-    const key = getAlbumKey(album);
-    return albums.findIndex((candidate: GalleryAlbum) => getAlbumKey(candidate) === key) === index;
-  }).slice(0, MAX_PUBLIC_ALL_ALBUMS);
+  const filters = [
+    { key: "wedding", label: "WEDDING" },
+    { key: "engagement", label: "ENGAGEMENT" },
+    { key: "preWedding", label: "PRE WEDDING" },
+  ] as const;
+  const activeAlbums = galleryContent[activeFilter];
 
   return (
     <>
@@ -603,27 +579,27 @@ function Gallery() {
         </section>
 
         {/* ===================================================
-            FILTERS BAR (All and Recent)
+            FILTERS BAR
         =================================================== */}
         <section className="px-8 sm:px-12 lg:px-24">
           <div className="mx-auto max-w-5xl">
             <div className="mb-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-b border-[#171717]/10 pb-4 sm:mb-10 sm:gap-x-0">
               {filters.map((filter, index) => (
-                <React.Fragment key={filter}>
+                <React.Fragment key={filter.key}>
                   {index > 0 && (
                     <span className="mx-4 hidden h-4 w-px bg-[#171717]/25 sm:block" />
                   )}
                   <button
                     type="button"
-                    onClick={() => setActiveFilter(filter)}
+                    onClick={() => setActiveFilter(filter.key)}
                     className={`text-[9px] uppercase tracking-[0.15em] transition-colors duration-300 ${
-                      activeFilter === filter
+                      activeFilter === filter.key
                         ? "text-[#181715] font-semibold"
                         : "text-[#171717]/45 hover:text-[#181715]"
                     }`}
                     style={{ fontFamily: FONT_BODY }}
                   >
-                    {filter}
+                    {filter.label}
                   </button>
                 </React.Fragment>
               ))}
@@ -632,59 +608,30 @@ function Gallery() {
         </section>
 
         {/* ===================================================
-            GALLERY ITEMS / RECENT ITEMS (ALBUM CARDS ONLY)
+            GALLERY ITEMS (ALBUM CARDS ONLY)
         =================================================== */}
         <section className="relative px-8 pb-16 sm:px-12 lg:px-24 lg:pb-20">
           <div className="mx-auto max-w-5xl">
-            {activeFilter === "Recent" ? (
-              /* RECENT TAB: Persisted recent album cards */
-              <div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-4 lg:gap-x-5 lg:gap-y-8">
-                {publicRecentAlbums.length > 0 ? (
-                  publicRecentAlbums.map((album, index) => (
-                    <AlbumCard
-                      key={album.id ?? `${album.slug}-${index}`}
-                      album={album}
-                      index={index}
-                    />
-                  ))
-                ) : (
-                  <div className="col-span-full py-16 text-center">
-                    <p
-                      className="text-sm text-[#171717]/50"
-                      style={{ fontFamily: FONT_BODY }}
-                    >
-                      No recent albums available.
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* ALL TAB: Combined Photo Gallery + Recent Album Cards (Max 12 displayed) */
-              (() => {
-                return (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-4 lg:gap-x-5 lg:gap-y-8">
-                    {publicAllAlbums.length > 0 ? (
-                      publicAllAlbums.map((album, index) => (
-                        <AlbumCard
-                          key={album.id ?? `${album.slug}-${index}`}
-                          album={album}
-                          index={index}
-                        />
-                      ))
-                    ) : (
-                      <div className="col-span-full py-16 text-center">
-                        <p
-                          className="text-sm text-[#171717]/50"
-                          style={{ fontFamily: FONT_BODY }}
-                        >
-                          No galleries available.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()
-            )}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-4 lg:gap-x-5 lg:gap-y-8">
+              {activeAlbums.length > 0 ? (
+                activeAlbums.map((album, index) => (
+                  <AlbumCard
+                    key={album.id ?? `${album.slug}-${index}`}
+                    album={album}
+                    index={index}
+                  />
+                ))
+              ) : (
+                <div className="col-span-full py-16 text-center">
+                  <p
+                    className="text-sm text-[#171717]/50"
+                    style={{ fontFamily: FONT_BODY }}
+                  >
+                    No {filters.find((filter) => filter.key === activeFilter)?.label.toLowerCase()} albums available.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 

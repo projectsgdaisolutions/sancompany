@@ -8,10 +8,10 @@ import { API_URL, readApiJson } from "../services/api";
 const API_BASE_URL = API_URL;
 
 /* =========================================================
-   FALLBACK COUPLES
+  FALLBACK WEDDING ALBUMS
 ========================================================= */
 
-const DEFAULT_COUPLES = [
+const DEFAULT_WEDDING_ALBUMS = [
   {
     id: 1,
     slug: "kapil-payal",
@@ -75,7 +75,7 @@ export default function AlbumDetail() {
         setLoading(true);
 
         // 1. Fetch album and photos directly from /api/gallery.php?slug=<slug>
-        // Reads from MySQL gallery_media WHERE category = 'gallery:<slug>' or 'recent:<slug>'
+        // The PHP API resolves the album's category from its slug.
         let albumPhotosList: string[] = [];
         let matchedCouple: GalleryCouple | null = null;
 
@@ -107,23 +107,27 @@ export default function AlbumDetail() {
             const contentRes = await fetch(`${API_BASE_URL}/api/content.php`, { cache: 'no-store' });
             if (contentRes.ok) {
               const contentData = await readApiJson(contentRes, 'Gallery content');
-              const savedCouples = contentData.content?.gallery?.couples;
-              const savedRecent = contentData.content?.gallery?.recentAlbums;
-              if (Array.isArray(savedCouples)) {
-                matchedCouple = savedCouples.find((c: GalleryCouple) => c.slug === slug);
-              }
-              if (!matchedCouple && Array.isArray(savedRecent)) {
-                matchedCouple = savedRecent.find((c: GalleryCouple) => c.slug === slug);
+              const savedGallery = contentData.content?.gallery || {};
+              const albumCollections = [
+                savedGallery.wedding ?? savedGallery.couples,
+                savedGallery.engagement ?? savedGallery.recentAlbums,
+                savedGallery.preWedding,
+              ];
+              for (const albums of albumCollections) {
+                if (Array.isArray(albums)) {
+                  matchedCouple = albums.find((album: GalleryCouple) => album.slug === slug) || null;
+                  if (matchedCouple) break;
+                }
               }
             }
           } catch (e) {
-            console.warn("Could not load content couples list:", e);
+            console.warn("Could not load gallery album metadata:", e);
           }
         }
 
         if (!matchedCouple) {
           // Check fallback defaults
-          matchedCouple = DEFAULT_COUPLES.find((c: GalleryCouple) => c.slug === slug) || null;
+          matchedCouple = DEFAULT_WEDDING_ALBUMS.find((c: GalleryCouple) => c.slug === slug) || null;
         }
 
         // If still not matched, format a basic couple object from the slug
