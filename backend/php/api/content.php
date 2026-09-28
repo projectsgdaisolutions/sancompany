@@ -25,7 +25,7 @@ ob_start();
  *   "heroHeadingLine1": "...",
  *   "heroHeadingLine2": "...",
  *
- *   "couples": [
+ *   "wedding": [
  *      {
  *        "id": "...",
  *        "slug": "...",
@@ -36,7 +36,7 @@ ob_start();
  *      }
  *   ],
  *
- *   "recentAlbums": [
+ *   "engagement": [
  *      {
  *        "id": "...",
  *        "slug": "...",
@@ -49,12 +49,12 @@ ob_start();
  * }
  *
  * IMPORTANT:
- *   Maximum TOTAL gallery cards = 16
+ *   "preWedding": [ ... ]
  *
- *   couples + recentAlbums <= 16
+ *   Maximum TOTAL gallery albums = 28
  *
  * PHOTO LIMIT:
- *   Maximum 500 photos per individual album/card.
+ *   Maximum 50 photos per individual album/card.
  *   The photo limit is enforced by gallery.php.
  */
 
@@ -71,9 +71,10 @@ header('Expires: 0');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-const MAX_GALLERY_CARDS = 16;
-const MAX_COUPLES_CARDS = 12;
-const MAX_RECENT_CARDS = 4;
+const MAX_GALLERY_CARDS = 28;
+const MAX_WEDDING_ALBUMS = 12;
+const MAX_ENGAGEMENT_ALBUMS = 8;
+const MAX_PRE_WEDDING_ALBUMS = 8;
 const MAX_FILMS = 24;
 
 const ALLOWED_FILM_CATEGORIES = [
@@ -265,36 +266,43 @@ function normalizeGalleryCard(
  * Validate gallery cards.
  *
  * TOTAL:
- *   couples + recentAlbums <= 16
+ *   wedding <= 12, engagement <= 8, preWedding <= 8
  *
  * Slugs must be unique across both sections.
  */
 function validateGalleryCards(
-    array $couples,
-    array $recentAlbums
+    array $wedding,
+    array $engagement,
+    array $preWedding
 ): void {
 
     $totalCards =
-        count($couples) +
-        count($recentAlbums);
+        count($wedding) +
+        count($engagement) +
+        count($preWedding);
 
-    if (count($couples) > MAX_COUPLES_CARDS) {
+    if (count($wedding) > MAX_WEDDING_ALBUMS) {
         errorResponse(
-            'Maximum ' .
-            MAX_COUPLES_CARDS .
-            ' Photo Gallery cards are allowed. You currently have ' .
-            count($couples) .
+            'Maximum ' . MAX_WEDDING_ALBUMS .
+            ' Wedding albums are allowed. You currently have ' . count($wedding) .
             ' cards.',
             400
         );
     }
 
-    if (count($recentAlbums) > MAX_RECENT_CARDS) {
+    if (count($engagement) > MAX_ENGAGEMENT_ALBUMS) {
         errorResponse(
-            'Maximum ' .
-            MAX_RECENT_CARDS .
-            ' Recent cards are allowed. You currently have ' .
-            count($recentAlbums) .
+            'Maximum ' . MAX_ENGAGEMENT_ALBUMS .
+            ' Engagement albums are allowed. You currently have ' . count($engagement) .
+            ' cards.',
+            400
+        );
+    }
+
+    if (count($preWedding) > MAX_PRE_WEDDING_ALBUMS) {
+        errorResponse(
+            'Maximum ' . MAX_PRE_WEDDING_ALBUMS .
+            ' Pre Wedding albums are allowed. You currently have ' . count($preWedding) .
             ' cards.',
             400
         );
@@ -318,17 +326,17 @@ function validateGalleryCards(
 
 
     /* ---------------------------------------------------------
-       Validate Photo Gallery albums
+    Validate Wedding albums
     --------------------------------------------------------- */
 
     foreach (
-        $couples
+        $wedding
         as $index => $album
     ) {
 
         if (!is_array($album)) {
             errorResponse(
-                'Invalid Photo Gallery album at position ' .
+                'Invalid Wedding album at position ' .
                 ($index + 1) .
                 '.',
                 400
@@ -351,7 +359,7 @@ function validateGalleryCards(
 
         if ($name === '') {
             errorResponse(
-                'Photo Gallery album name is required at position ' .
+                'Wedding album name is required at position ' .
                 ($index + 1) .
                 '.',
                 400
@@ -360,7 +368,7 @@ function validateGalleryCards(
 
         if ($slug === '') {
             errorResponse(
-                'Photo Gallery album slug is required for "' .
+                'Wedding album slug is required for "' .
                 $name .
                 '".',
                 400
@@ -395,17 +403,17 @@ function validateGalleryCards(
 
 
     /* ---------------------------------------------------------
-       Validate Recent albums
+    Validate Engagement and Pre Wedding albums
     --------------------------------------------------------- */
 
     foreach (
-        $recentAlbums
+        array_merge($engagement, $preWedding)
         as $index => $album
     ) {
 
         if (!is_array($album)) {
             errorResponse(
-                'Invalid Recent album at position ' .
+                'Invalid Engagement or Pre Wedding album at position ' .
                 ($index + 1) .
                 '.',
                 400
@@ -428,7 +436,7 @@ function validateGalleryCards(
 
         if ($name === '') {
             errorResponse(
-                'Recent album name is required at position ' .
+                'Engagement or Pre Wedding album name is required at position ' .
                 ($index + 1) .
                 '.',
                 400
@@ -437,7 +445,7 @@ function validateGalleryCards(
 
         if ($slug === '') {
             errorResponse(
-                'Recent album slug is required for "' .
+                'Engagement or Pre Wedding album slug is required for "' .
                 $name .
                 '".',
                 400
@@ -451,7 +459,7 @@ function validateGalleryCards(
             )
         ) {
             errorResponse(
-                'Invalid Recent slug "' .
+                'Invalid gallery slug "' .
                 $slug .
                 '". Use lowercase letters, numbers and hyphens only.',
                 400
@@ -516,85 +524,34 @@ function sortGalleryCards(
  * Normalize complete gallery structure.
  */
 function normalizeGallery(
-    array $gallery
+    array $gallery,
+    bool $includeLegacyAliases = false
 ): array {
+    $sourceAlbums = [
+        'wedding' => $gallery['wedding'] ?? $gallery['couples'] ?? [],
+        'engagement' => $gallery['engagement'] ?? $gallery['recentAlbums'] ?? [],
+        'preWedding' => $gallery['preWedding'] ?? [],
+    ];
 
-    $couples =
-        isset($gallery['couples']) &&
-        is_array($gallery['couples'])
-            ? $gallery['couples']
-            : [];
-
-
-    $recentAlbums =
-        isset($gallery['recentAlbums']) &&
-        is_array($gallery['recentAlbums'])
-            ? $gallery['recentAlbums']
-            : [];
-
-
-    $normalizedCouples = [];
-
-    foreach (
-        $couples
-        as $index => $couple
-    ) {
-
-        if (!is_array($couple)) {
-            continue;
-        }
-
-        $normalizedCouples[] =
-            normalizeGalleryCard(
-                $couple,
-                $index,
-                'album'
-            );
-    }
-
-
-    $normalizedRecentAlbums = [];
-
-    foreach (
-        $recentAlbums
-        as $index => $album
-    ) {
-
-        if (!is_array($album)) {
-            continue;
-        }
-
-        $normalizedRecentAlbums[] =
-            normalizeGalleryCard(
-                $album,
-                $index,
-                'recent'
-            );
-    }
-
-
-    $normalizedCouples =
-        sortGalleryCards(
-            $normalizedCouples
-        );
-
-    $normalizedRecentAlbums =
-        sortGalleryCards(
-            $normalizedRecentAlbums
-        );
-
-
-    /*
-     * Preserve all other gallery fields.
-     */
     $normalized = $gallery;
+    unset($normalized['couples'], $normalized['recentAlbums']);
 
-    $normalized['couples'] =
-        $normalizedCouples;
+    foreach ($sourceAlbums as $section => $albums) {
+        $normalizedAlbums = [];
+        if (is_array($albums)) {
+            foreach ($albums as $index => $album) {
+                if (is_array($album)) {
+                    $normalizedAlbums[] = normalizeGalleryCard($album, $index, $section);
+                }
+            }
+        }
+        $normalized[$section] = sortGalleryCards($normalizedAlbums);
+    }
 
-    $normalized['recentAlbums'] =
-        $normalizedRecentAlbums;
-
+    if ($includeLegacyAliases) {
+        $normalized['couples'] = $normalized['wedding'];
+        $normalized['recentAlbums'] = $normalized['engagement'];
+    }
 
     return $normalized;
 }
@@ -958,7 +915,8 @@ try {
 
             $galleryContent =
                 normalizeGallery(
-                    $galleryContent
+                    $galleryContent,
+                    true
                 );
 
         } catch (Throwable $e) {
@@ -1021,10 +979,17 @@ try {
                 ? $galleryContent['recentAlbums']
                 : [];
 
+        $preWeddingAlbums =
+            isset($galleryContent['preWedding']) &&
+            is_array($galleryContent['preWedding'])
+                ? $galleryContent['preWedding']
+                : [];
+
 
         $totalGalleryCards =
             count($couples) +
-            count($recentAlbums);
+            count($recentAlbums) +
+            count($preWeddingAlbums);
 
 
         /* -------------------------------------------------
@@ -1062,6 +1027,10 @@ try {
                     'recentCards' =>
                         count($recentAlbums),
 
+                    'weddingCards' => count($galleryContent['wedding'] ?? []),
+                    'engagementCards' => count($galleryContent['engagement'] ?? []),
+                    'preWeddingCards' => count($preWeddingAlbums),
+
                     'totalCards' =>
                         $totalGalleryCards,
 
@@ -1073,7 +1042,7 @@ try {
                         ),
 
                     'maxPhotosPerCard' =>
-                        40,
+                        50,
 
                     'films' => [
                         'maxFilms' => MAX_FILMS,
@@ -1209,10 +1178,14 @@ try {
              * This prevents accidental deletion of fields
              * when frontend sends a partial gallery object.
              */
-            $existingGallery =
-                getGalleryContent(
-                    $pdo
-                );
+            $existingGallery = normalizeGallery(getGalleryContent($pdo));
+
+            if (!array_key_exists('wedding', $galleryData) && isset($galleryData['couples'])) {
+                $galleryData['wedding'] = $galleryData['couples'];
+            }
+            if (!array_key_exists('engagement', $galleryData) && isset($galleryData['recentAlbums'])) {
+                $galleryData['engagement'] = $galleryData['recentAlbums'];
+            }
 
 
             /*
@@ -1283,7 +1256,7 @@ try {
 
 
             /* ---------------------------------------------
-               Normalize Recent albums
+               Normalize Engagement albums
             --------------------------------------------- */
 
             if (
@@ -1398,12 +1371,15 @@ try {
 
 
             /* ---------------------------------------------
-               Validate total 16-card limit
+               Validate category limits and 28-album total
             --------------------------------------------- */
 
+            $mergedGallery = normalizeGallery($mergedGallery);
+
             validateGalleryCards(
-                $mergedGallery['couples'],
-                $mergedGallery['recentAlbums']
+                $mergedGallery['wedding'],
+                $mergedGallery['engagement'],
+                $mergedGallery['preWedding']
             );
 
 
@@ -1467,31 +1443,21 @@ try {
         }
 
 
-        $responseCouples =
-            isset(
-                $responseGallery['couples']
-            ) &&
-            is_array(
-                $responseGallery['couples']
-            )
-                ? $responseGallery['couples']
-                : [];
-
-
-        $responseRecentAlbums =
-            isset(
-                $responseGallery['recentAlbums']
-            ) &&
-            is_array(
-                $responseGallery['recentAlbums']
-            )
-                ? $responseGallery['recentAlbums']
-                : [];
+        $responseWeddingAlbums = is_array($responseGallery['wedding'] ?? null)
+            ? $responseGallery['wedding']
+            : [];
+        $responseEngagementAlbums = is_array($responseGallery['engagement'] ?? null)
+            ? $responseGallery['engagement']
+            : [];
+        $responsePreWeddingAlbums = is_array($responseGallery['preWedding'] ?? null)
+            ? $responseGallery['preWedding']
+            : [];
 
 
         $totalCards =
-            count($responseCouples) +
-            count($responseRecentAlbums);
+            count($responseWeddingAlbums) +
+            count($responseEngagementAlbums) +
+            count($responsePreWeddingAlbums);
 
 
         jsonResponse(
@@ -1514,10 +1480,14 @@ try {
                         MAX_GALLERY_CARDS,
 
                     'photoGalleryCards' =>
-                        count($responseCouples),
+                        count($responseWeddingAlbums),
 
                     'recentCards' =>
-                        count($responseRecentAlbums),
+                        count($responseEngagementAlbums),
+
+                    'weddingCards' => count($responseWeddingAlbums),
+                    'engagementCards' => count($responseEngagementAlbums),
+                    'preWeddingCards' => count($responsePreWeddingAlbums),
 
                     'totalCards' =>
                         $totalCards,
@@ -1530,7 +1500,7 @@ try {
                         ),
 
                     'maxPhotosPerCard' =>
-                        40,
+                        50,
 
                     'films' => [
                         'maxFilms' => MAX_FILMS,

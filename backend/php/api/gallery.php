@@ -13,16 +13,17 @@ ob_start();
  * Album/Card metadata:
  *   website_content.gallery
  *
- * Photo Gallery albums:
- *   website_content.gallery.couples[]
+ * Gallery albums:
+ *   website_content.gallery.wedding[]
+ *   website_content.gallery.engagement[]
+ *   website_content.gallery.preWedding[]
  *
- * Recent albums:
- *   website_content.gallery.recentAlbums[]
+ * Legacy couples/recentAlbums keys are mapped during reads.
  *
- * Photo Gallery media:
+ * Wedding media (including legacy couples albums):
  *   gallery_media.category = gallery:<slug>
  *
- * Recent media:
+ * Engagement media (including legacy Recent albums):
  *   gallery_media.category = recent:<slug>
  *
  * =========================================================
@@ -30,10 +31,10 @@ ob_start();
  * =========================================================
  *
  * Maximum total cards:
- *   couples + recentAlbums = 16
+ *   wedding <= 12, engagement <= 8, preWedding <= 8
  *
  * Maximum photos per individual card:
- *   500
+ *   50
  *
  * Cover image:
  *   Stored in website_content.gallery
@@ -60,10 +61,11 @@ header('Expires: 0');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-const MAX_GALLERY_CARDS = 16;
-const MAX_COUPLES_CARDS = 12;
-const MAX_RECENT_CARDS = 4;
-const MAX_PHOTOS_PER_CARD = 500;
+const MAX_GALLERY_CARDS = 28;
+const MAX_WEDDING_ALBUMS = 12;
+const MAX_ENGAGEMENT_ALBUMS = 8;
+const MAX_PRE_WEDDING_ALBUMS = 8;
+const MAX_PHOTOS_PER_CARD = 50;
 const MAX_HOME_COUPLE_PHOTOS = 40;
 
 
@@ -171,6 +173,11 @@ function saveGalleryMetadata(
     array $gallery
 ): void {
 
+    $gallery['wedding'] = $gallery['couples'] ?? $gallery['wedding'] ?? [];
+    $gallery['engagement'] = $gallery['recentAlbums'] ?? $gallery['engagement'] ?? [];
+    $gallery['preWedding'] = $gallery['preWedding'] ?? [];
+    unset($gallery['couples'], $gallery['recentAlbums']);
+
     $json = json_encode(
         $gallery,
         JSON_UNESCAPED_UNICODE |
@@ -247,11 +254,7 @@ function getRecentAlbums(
 
 
 /**
- * Determine section from request.
- *
- * Supported:
- *   couples
- *   recentAlbums
+ * Normalize category names while retaining legacy request aliases.
  */
 function normalizeSection(
     ?string $section
@@ -261,11 +264,16 @@ function normalizeSection(
         (string) $section
     );
 
-    if (
-        $section === 'recent' ||
-        $section === 'recentAlbums'
-    ) {
+    if (in_array($section, ['engagement', 'recent', 'recentAlbums'], true)) {
         return 'recentAlbums';
+    }
+
+    if ($section === 'preWedding' || $section === 'pre-wedding') {
+        return 'preWedding';
+    }
+
+    if ($section === 'wedding' || $section === 'couples') {
+        return 'couples';
     }
 
     if ($section === 'homeCouples') {
@@ -273,6 +281,24 @@ function normalizeSection(
     }
 
     return 'couples';
+}
+
+function getGallerySectionLabel(string $section): string
+{
+    return match ($section) {
+        'recentAlbums' => 'Engagement',
+        'preWedding' => 'Pre Wedding',
+        default => 'Wedding',
+    };
+}
+
+function getGalleryAlbumLimit(string $section): int
+{
+    return match ($section) {
+        'recentAlbums' => MAX_ENGAGEMENT_ALBUMS,
+        'preWedding' => MAX_PRE_WEDDING_ALBUMS,
+        default => MAX_WEDDING_ALBUMS,
+    };
 }
 
 
@@ -286,6 +312,10 @@ function buildCategory(
 
     if ($section === 'recentAlbums') {
         return 'recent:' . $slug;
+    }
+
+    if ($section === 'preWedding') {
+        return 'pre-wedding:' . $slug;
     }
 
     if ($section === 'homeCouples') {
@@ -320,14 +350,18 @@ function getSectionFromCategory(
             'recent:'
         )
     ) {
-        return 'recentAlbums';
+        return 'engagement';
     }
 
     if (str_starts_with($category, 'home-couple:')) {
         return 'homeCouples';
     }
 
-    return 'couples';
+    if (str_starts_with($category, 'pre-wedding:')) {
+        return 'preWedding';
+    }
+
+    return 'wedding';
 }
 
 
@@ -341,11 +375,13 @@ function findAlbumBySlug(
 
     $gallery =
         getGalleryMetadata($pdo);
+    ensureGalleryArrays($gallery);
 
     foreach (
         [
             'couples',
-            'recentAlbums'
+            'recentAlbums',
+            'preWedding'
         ]
         as $section
     ) {
@@ -394,7 +430,8 @@ function slugExists(
     foreach (
         [
             'couples',
-            'recentAlbums'
+            'recentAlbums',
+            'preWedding'
         ]
         as $section
     ) {
@@ -655,6 +692,14 @@ function ensureGalleryArrays(
     array &$gallery
 ): void {
 
+    if (isset($gallery['wedding']) && is_array($gallery['wedding'])) {
+        $gallery['couples'] = $gallery['wedding'];
+    }
+
+    if (isset($gallery['engagement']) && is_array($gallery['engagement'])) {
+        $gallery['recentAlbums'] = $gallery['engagement'];
+    }
+
     if (
         !isset($gallery['couples']) ||
         !is_array($gallery['couples'])
@@ -667,6 +712,10 @@ function ensureGalleryArrays(
         !is_array($gallery['recentAlbums'])
     ) {
         $gallery['recentAlbums'] = [];
+    }
+
+    if (!isset($gallery['preWedding']) || !is_array($gallery['preWedding'])) {
+        $gallery['preWedding'] = [];
     }
 }
 
@@ -1012,6 +1061,16 @@ try {
                 )
             );
 
+        $preWeddingAlbums = sortAlbums(
+            array_map(
+                function ($album, $index) {
+                    return normalizeAlbum($album, $index, 'pre-wedding');
+                },
+                $gallery['preWedding'],
+                array_keys($gallery['preWedding'])
+            )
+        );
+
 
         /*
          * Admin can request album metadata and counts without loading
@@ -1045,6 +1104,7 @@ try {
 
         $galleryBySlug = [];
         $recentBySlug = [];
+        $preWeddingBySlug = [];
 
 
         foreach (
@@ -1115,6 +1175,13 @@ try {
 
                 $recentBySlug[$slug][] =
                     $row;
+
+                continue;
+            }
+
+            if (str_starts_with($category, 'pre-wedding:')) {
+                $slug = substr($category, strlen('pre-wedding:'));
+                $preWeddingBySlug[$slug][] = $row;
             }
         }
 
@@ -1175,6 +1242,13 @@ try {
 
         unset($album);
 
+        foreach ($preWeddingAlbums as &$album) {
+            $category = buildCategory('preWedding', $album['slug']);
+            $album['photoCount'] = getPhotoCount($pdo, $category);
+            $album['maxPhotos'] = MAX_PHOTOS_PER_CARD;
+        }
+        unset($album);
+
 
         /*
          * Put normalized arrays back in gallery object.
@@ -1185,10 +1259,15 @@ try {
         $gallery['recentAlbums'] =
             $recentAlbums;
 
+        $gallery['wedding'] = $couples;
+        $gallery['engagement'] = $recentAlbums;
+        $gallery['preWedding'] = $preWeddingAlbums;
+
 
         $totalCards =
             count($couples) +
-            count($recentAlbums);
+            count($recentAlbums) +
+            count($preWeddingAlbums);
 
 
         jsonResponse(
@@ -1207,11 +1286,17 @@ try {
                 'recentAlbums' =>
                     $recentAlbums,
 
+                'wedding' => $couples,
+                'engagement' => $recentAlbums,
+                'preWedding' => $preWeddingAlbums,
+
                 'galleryBySlug' =>
                     $galleryBySlug,
 
                 'recentBySlug' =>
                     $recentBySlug,
+
+                'preWeddingBySlug' => $preWeddingBySlug,
 
                 'all' =>
                     $rows,
@@ -1322,35 +1407,24 @@ try {
             }
 
 
-            /*
-             * Hard maximum 16 cards TOTAL.
-             */
+            $sectionAlbumCount = count($gallery[$section] ?? []);
+            $sectionAlbumLimit = getGalleryAlbumLimit($section);
+
+            if ($sectionAlbumCount >= $sectionAlbumLimit) {
+                errorResponse(
+                    'Maximum ' . $sectionAlbumLimit . ' ' . getGallerySectionLabel($section) . ' albums are allowed.',
+                    400
+                );
+            }
+
             $totalCards =
                 count(
                     $gallery['couples']
                 ) +
                 count(
                     $gallery['recentAlbums']
-                );
-
-
-            if ($section === 'recentAlbums' && count($gallery['recentAlbums']) >= MAX_RECENT_CARDS) {
-                errorResponse(
-                    'Maximum ' .
-                    MAX_RECENT_CARDS .
-                    ' Recent cards are allowed.',
-                    400
-                );
-            }
-
-            if ($section === 'couples' && count($gallery['couples']) >= MAX_COUPLES_CARDS) {
-                errorResponse(
-                    'Maximum ' .
-                    MAX_COUPLES_CARDS .
-                    ' Photo Gallery cards are allowed.',
-                    400
-                );
-            }
+                ) +
+                count($gallery['preWedding']);
 
             if (
                 $totalCards >=
@@ -1519,13 +1593,7 @@ try {
                 [
                     'success' => true,
 
-                    'message' =>
-                        (
-                            $section ===
-                            'recentAlbums'
-                        )
-                            ? 'Recent album created successfully.'
-                            : 'Photo Gallery album created successfully.',
+                    'message' => getGallerySectionLabel($section) . ' album created successfully.',
 
                     'section' =>
                         $section,
@@ -1534,22 +1602,12 @@ try {
                         $newAlbum,
 
                     'totalCards' =>
-                        count(
-                            $gallery['couples']
-                        ) +
-                        count(
-                            $gallery['recentAlbums']
-                        ),
+                        count($gallery['couples']) + count($gallery['recentAlbums']) + count($gallery['preWedding']),
 
                     'remainingCards' =>
                         MAX_GALLERY_CARDS -
                         (
-                            count(
-                                $gallery['couples']
-                            ) +
-                            count(
-                                $gallery['recentAlbums']
-                            )
+                            count($gallery['couples']) + count($gallery['recentAlbums']) + count($gallery['preWedding'])
                         ),
                 ],
                 201
@@ -2454,7 +2512,8 @@ try {
             foreach (
                 [
                     'couples',
-                    'recentAlbums'
+                    'recentAlbums',
+                    'preWedding'
                 ]
                 as $section
             ) {
@@ -2910,7 +2969,8 @@ try {
                     ? [$section]
                     : [
                         'couples',
-                        'recentAlbums'
+                        'recentAlbums',
+                        'preWedding'
                     ];
 
 
@@ -3770,7 +3830,8 @@ try {
             foreach (
                 [
                     'couples',
-                    'recentAlbums'
+                    'recentAlbums',
+                    'preWedding'
                 ]
                 as $section
             ) {
@@ -3920,13 +3981,7 @@ try {
                     [
                         'success' => true,
 
-                        'message' =>
-                            (
-                                $foundSection ===
-                                'recentAlbums'
-                            )
-                                ? 'Recent album deleted successfully.'
-                                : 'Photo Gallery album deleted successfully.',
+                        'message' => getGallerySectionLabel($foundSection) . ' album deleted successfully.',
 
                         'slug' =>
                             $slug,

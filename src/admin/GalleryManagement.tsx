@@ -73,13 +73,28 @@ interface RejectedPhoto {
   message: string;
 }
 
-type GallerySection = "couples" | "recentAlbums";
+type GallerySection = "wedding" | "engagement" | "preWedding";
+
+const GALLERY_SECTIONS: GallerySection[] = ["wedding", "engagement", "preWedding"];
+const GALLERY_SECTION_LABELS: Record<GallerySection, string> = {
+  wedding: "Wedding",
+  engagement: "Engagement",
+  preWedding: "Pre Wedding",
+};
+const GALLERY_MEDIA_PREFIXES: Record<GallerySection, string> = {
+  wedding: "gallery",
+  engagement: "recent",
+  preWedding: "pre-wedding",
+};
+const getMediaCategory = (section: GallerySection, slug: string) => `${GALLERY_MEDIA_PREFIXES[section]}:${slug}`;
+const getMediaFolder = (section: GallerySection, slug: string) =>
+  `san-photography/gallery/${section === "engagement" ? "recent" : section === "preWedding" ? "pre-wedding" : slug}`;
 
 interface GalleryApiResponse {
   success?: boolean;
   message?: string;
-  content?: { gallery?: Partial<GalleryHeader> & { couples?: unknown; recentAlbums?: unknown }; [key: string]: unknown };
-  gallery?: { albums?: unknown; recentAlbums?: unknown; header?: Partial<GalleryHeader>; album?: GalleryAdminAlbum; recentBySlug?: Record<string, AdminGalleryPhoto[]>; bySlug?: Record<string, AdminGalleryPhoto[]> };
+  content?: { gallery?: Partial<GalleryHeader> & { wedding?: unknown; engagement?: unknown; preWedding?: unknown; couples?: unknown; recentAlbums?: unknown }; [key: string]: unknown };
+  gallery?: { albums?: unknown; wedding?: unknown; engagement?: unknown; preWedding?: unknown; header?: Partial<GalleryHeader>; album?: GalleryAdminAlbum; recentBySlug?: Record<string, AdminGalleryPhoto[]>; bySlug?: Record<string, AdminGalleryPhoto[]> };
   galleryBySlug?: Record<string, AdminGalleryPhoto[]>;
   photos?: AdminGalleryPhoto[];
   album?: GalleryAdminAlbum;
@@ -88,10 +103,13 @@ interface GalleryApiResponse {
 
 const API_BASE_URL = API_URL;
 
-const MAX_CARDS = 16;
-const MAX_COUPLES_CARDS = 12;
-const MAX_RECENT_CARDS = 4;
-const MAX_PHOTOS = 500;
+const MAX_CARDS = 28;
+const MAX_PHOTOS = 50;
+const MAX_ALBUMS_BY_SECTION: Record<GallerySection, number> = {
+  wedding: 12,
+  engagement: 8,
+  preWedding: 8,
+};
 const MAX_IMAGE_SIZE = 25 * 1024 * 1024;
 const MAX_CONCURRENT_PHOTO_UPLOADS = 3;
 const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -127,7 +145,7 @@ function QueuedPhotoPreview({ file }: { file: File }) {
   return previewUrl ? <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" /> : null;
 }
 
-const DEFAULT_COUPLES: GalleryAdminAlbum[] = [
+const DEFAULT_WEDDING_ALBUMS: GalleryAdminAlbum[] = [
   {
     id: "1",
     slug: "kapil-payal",
@@ -154,7 +172,8 @@ const DEFAULT_COUPLES: GalleryAdminAlbum[] = [
   },
 ];
 
-const DEFAULT_RECENT_ALBUMS: GalleryAdminAlbum[] = [];
+const DEFAULT_ENGAGEMENT_ALBUMS: GalleryAdminAlbum[] = [];
+const DEFAULT_PRE_WEDDING_ALBUMS: GalleryAdminAlbum[] = [];
 
 const DEFAULT_HEADER: GalleryHeader = {
   heroEyebrow: "SAN / GALLERY",
@@ -245,20 +264,19 @@ export default function GalleryManagement() {
   const [originalHeader, setOriginalHeader] = useState<GalleryHeader>(DEFAULT_HEADER);
 
   /* =========================================================
-     PHOTO GALLERY ALBUMS
+    WEDDING ALBUMS
   ========================================================= */
 
-  const [albums, setAlbums] = useState<GalleryAdminAlbum[]>(DEFAULT_COUPLES);
-
-  const [originalAlbums, setOriginalAlbums] = useState<GalleryAdminAlbum[]>(DEFAULT_COUPLES);
-
-  /* =========================================================
-     RECENT ALBUMS
-  ========================================================= */
-
-  const [recentAlbums, setRecentAlbums] = useState<GalleryAdminAlbum[]>(DEFAULT_RECENT_ALBUMS);
-
-  const [originalRecentAlbums, setOriginalRecentAlbums] = useState<GalleryAdminAlbum[]>(DEFAULT_RECENT_ALBUMS);
+  const [albumsBySection, setAlbumsBySection] = useState<Record<GallerySection, GalleryAdminAlbum[]>>({
+    wedding: DEFAULT_WEDDING_ALBUMS,
+    engagement: DEFAULT_ENGAGEMENT_ALBUMS,
+    preWedding: DEFAULT_PRE_WEDDING_ALBUMS,
+  });
+  const [originalAlbumsBySection, setOriginalAlbumsBySection] = useState<Record<GallerySection, GalleryAdminAlbum[]>>({
+    wedding: DEFAULT_WEDDING_ALBUMS,
+    engagement: DEFAULT_ENGAGEMENT_ALBUMS,
+    preWedding: DEFAULT_PRE_WEDDING_ALBUMS,
+  });
 
   /* =========================================================
      MEDIA STATE
@@ -267,13 +285,16 @@ export default function GalleryManagement() {
   // {
   //   [slug]: Photo[]
   // }
-  const [albumPhotos, setAlbumPhotos] = useState<Record<string, AdminGalleryPhoto[]>>({});
-
-  const [recentAlbumPhotos, setRecentAlbumPhotos] = useState<Record<string, AdminGalleryPhoto[]>>({});
-
-  const [loadingAlbumPhotos, setLoadingAlbumPhotos] = useState<Record<string, boolean>>({});
-
-  const [loadingRecentAlbumPhotos, setLoadingRecentAlbumPhotos] = useState<Record<string, boolean>>({});
+  const [photosBySection, setPhotosBySection] = useState<Record<GallerySection, Record<string, AdminGalleryPhoto[]>>>({
+    wedding: {},
+    engagement: {},
+    preWedding: {},
+  });
+  const [loadingPhotosBySection, setLoadingPhotosBySection] = useState<Record<GallerySection, Record<string, boolean>>>({
+    wedding: {},
+    engagement: {},
+    preWedding: {},
+  });
 
   const [expandedAlbumKey, setExpandedAlbumKey] = useState<string | null>(null);
 
@@ -309,7 +330,7 @@ export default function GalleryManagement() {
       image: "",
     });
 
-  const [newAlbumSection, setNewAlbumSection] = useState<GallerySection>("couples");
+  const [newAlbumSection, setNewAlbumSection] = useState<GallerySection>("wedding");
 
   const [showAddAlbum, setShowAddAlbum] =
     useState(false);
@@ -318,8 +339,10 @@ export default function GalleryManagement() {
      CARD COUNT
   ========================================================= */
 
-  const totalCards =
-    albums.length + recentAlbums.length;
+  const totalCards = GALLERY_SECTIONS.reduce(
+    (total, section) => total + albumsBySection[section].length,
+    0
+  );
 
   const remainingCards =
     Math.max(0, MAX_CARDS - totalCards);
@@ -332,18 +355,14 @@ export default function GalleryManagement() {
     return (
       JSON.stringify(header) !==
         JSON.stringify(originalHeader) ||
-      JSON.stringify(albums) !==
-        JSON.stringify(originalAlbums) ||
-      JSON.stringify(recentAlbums) !==
-        JSON.stringify(originalRecentAlbums)
+      JSON.stringify(albumsBySection) !==
+        JSON.stringify(originalAlbumsBySection)
     );
   }, [
     header,
     originalHeader,
-    albums,
-    originalAlbums,
-    recentAlbums,
-    originalRecentAlbums,
+    albumsBySection,
+    originalAlbumsBySection,
   ]);
 
   /* =========================================================
@@ -362,6 +381,37 @@ export default function GalleryManagement() {
     ...authenticatedHeaders(),
   });
 
+  const getSectionAlbums = (section: GallerySection) => albumsBySection[section];
+  const isAtAlbumLimit = (section: GallerySection) =>
+    getSectionAlbums(section).length >= MAX_ALBUMS_BY_SECTION[section];
+
+  const updateSectionAlbums = (
+    section: GallerySection,
+    update: (albums: GalleryAdminAlbum[]) => GalleryAdminAlbum[]
+  ) => {
+    setAlbumsBySection((previous) => ({
+      ...previous,
+      [section]: update(previous[section]),
+    }));
+  };
+
+  const updateSectionPhotos = (
+    section: GallerySection,
+    update: (photos: Record<string, AdminGalleryPhoto[]>) => Record<string, AdminGalleryPhoto[]>
+  ) => {
+    setPhotosBySection((previous) => ({
+      ...previous,
+      [section]: update(previous[section]),
+    }));
+  };
+
+  const updateSectionLoading = (section: GallerySection, slug: string, isLoading: boolean) => {
+    setLoadingPhotosBySection((previous) => ({
+      ...previous,
+      [section]: { ...previous[section], [slug]: isLoading },
+    }));
+  };
+
   /* =========================================================
      LOAD DATA
   ========================================================= */
@@ -376,7 +426,8 @@ export default function GalleryManagement() {
       ----------------------------------------------------- */
 
       const contentRes = await fetch(
-        `${API_BASE_URL}/api/content.php`
+        `${API_BASE_URL}/api/content.php`,
+        { cache: "no-store" }
       );
 
       const contentData =
@@ -437,51 +488,27 @@ export default function GalleryManagement() {
           DEFAULT_HEADER.ctaButtonHref,
       };
 
-      const loadedAlbums =
-        normalizeAlbums(
-          gallery.couples
-        );
-
-      const loadedRecentAlbums =
-        normalizeAlbums(
-          gallery.recentAlbums
-        );
+      const loadedAlbumsBySection: Record<GallerySection, GalleryAdminAlbum[]> = {
+        wedding: normalizeAlbums(gallery.wedding ?? gallery.couples),
+        engagement: normalizeAlbums(gallery.engagement ?? gallery.recentAlbums),
+        preWedding: normalizeAlbums(gallery.preWedding),
+      };
 
       setHeader(loadedHeader);
       setOriginalHeader(
         deepClone(loadedHeader)
       );
 
-      setAlbums(
-        loadedAlbums.length
-          ? loadedAlbums
-          : []
-      );
-
-      setOriginalAlbums(
-        deepClone(
-          loadedAlbums.length
-            ? loadedAlbums
-            : []
-        )
-      );
-
-      setRecentAlbums(
-        loadedRecentAlbums
-      );
-
-      setOriginalRecentAlbums(
-        deepClone(
-          loadedRecentAlbums
-        )
-      );
+      setAlbumsBySection(loadedAlbumsBySection);
+      setOriginalAlbumsBySection(deepClone(loadedAlbumsBySection));
 
       /* -----------------------------------------------------
          GALLERY MEDIA
       ----------------------------------------------------- */
 
       const galleryRes = await fetch(
-        `${API_BASE_URL}/api/gallery.php?include_inactive=1&include_media=0`
+        `${API_BASE_URL}/api/gallery.php?include_inactive=1&include_media=0`,
+        { cache: "no-store" }
       );
 
       const galleryData =
@@ -500,12 +527,10 @@ export default function GalleryManagement() {
       }
 
       /*
-       * galleryBySlug contains normal
-       * Photo Gallery albums.
+      * galleryBySlug retains existing Wedding media keys.
        */
 
-      setAlbumPhotos({});
-      setRecentAlbumPhotos({});
+      setPhotosBySection({ wedding: {}, engagement: {}, preWedding: {} });
     } catch (error: unknown) {
       console.error(
         "Gallery load error:",
@@ -530,34 +555,18 @@ export default function GalleryManagement() {
 
   const fetchAlbumPhotos = async (
     slug: string,
-    section: GallerySection = "couples"
+    section: GallerySection = "wedding"
   ) => {
     if (!slug) return;
 
-    const isRecent =
-      section === "recentAlbums";
-
     try {
-      if (isRecent) {
-        setLoadingRecentAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]: true,
-          })
-        );
-      } else {
-        setLoadingAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]: true,
-          })
-        );
-      }
+      updateSectionLoading(section, slug, true);
 
       const response = await fetch(
         `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(
           slug
-        )}&section=${encodeURIComponent(section)}`
+        )}&section=${encodeURIComponent(section)}`,
+        { cache: "no-store" }
       );
 
       const data =
@@ -578,21 +587,7 @@ export default function GalleryManagement() {
           ? data.photos
           : [];
 
-      if (isRecent) {
-        setRecentAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]: photos,
-          })
-        );
-      } else {
-        setAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]: photos,
-          })
-        );
-      }
+      updateSectionPhotos(section, (previous) => ({ ...previous, [slug]: photos }));
     } catch (error: unknown) {
       console.error(
         `Failed to load photos for ${slug}:`,
@@ -603,21 +598,7 @@ export default function GalleryManagement() {
         error instanceof Error ? error.message : "Failed to load album photos."
       );
     } finally {
-      if (isRecent) {
-        setLoadingRecentAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]: false,
-          })
-        );
-      } else {
-        setLoadingAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]: false,
-          })
-        );
-      }
+      updateSectionLoading(section, slug, false);
     }
   };
 
@@ -652,23 +633,14 @@ export default function GalleryManagement() {
   ========================================================= */
 
   const openAddAlbum = (section: GallerySection) => {
-    if (section === "couples" && albums.length >= MAX_COUPLES_CARDS) {
-      alert(
-        `Maximum ${MAX_COUPLES_CARDS} Photo Gallery cards are allowed.`
-      );
-      return;
-    }
-
-    if (section === "recentAlbums" && recentAlbums.length >= MAX_RECENT_CARDS) {
-      alert(
-        `Maximum ${MAX_RECENT_CARDS} Recent cards are allowed.`
-      );
+    if (isAtAlbumLimit(section)) {
+      alert(`Maximum ${MAX_ALBUMS_BY_SECTION[section]} ${GALLERY_SECTION_LABELS[section]} albums are allowed.`);
       return;
     }
 
     if (totalCards >= MAX_CARDS) {
       alert(
-        `Maximum ${MAX_CARDS} cards are allowed in Gallery + Recent combined.`
+        `Maximum ${MAX_CARDS} albums are allowed across all gallery categories.`
       );
       return;
     }
@@ -686,17 +658,8 @@ export default function GalleryManagement() {
   };
 
   const handleAddAlbum = () => {
-    if (newAlbumSection === "couples" && albums.length >= MAX_COUPLES_CARDS) {
-      alert(
-        `Maximum ${MAX_COUPLES_CARDS} Photo Gallery cards are allowed.`
-      );
-      return;
-    }
-
-    if (newAlbumSection === "recentAlbums" && recentAlbums.length >= MAX_RECENT_CARDS) {
-      alert(
-        `Maximum ${MAX_RECENT_CARDS} Recent cards are allowed.`
-      );
+    if (isAtAlbumLimit(newAlbumSection)) {
+      alert(`Maximum ${MAX_ALBUMS_BY_SECTION[newAlbumSection]} ${GALLERY_SECTION_LABELS[newAlbumSection]} albums are allowed.`);
       return;
     }
 
@@ -730,10 +693,7 @@ export default function GalleryManagement() {
       return;
     }
 
-    const allAlbums = [
-      ...albums,
-      ...recentAlbums,
-    ];
+    const allAlbums = GALLERY_SECTIONS.flatMap((section) => getSectionAlbums(section));
 
     const duplicate =
       allAlbums.some(
@@ -744,16 +704,12 @@ export default function GalleryManagement() {
 
     if (duplicate) {
       alert(
-        "An album with this slug already exists. Slug must be unique across Photo Gallery and Recent."
+          "An album with this slug already exists. Slugs must be unique across all gallery categories."
       );
       return;
     }
 
-    const targetList =
-      newAlbumSection ===
-      "recentAlbums"
-        ? recentAlbums
-        : albums;
+    const targetList = getSectionAlbums(newAlbumSection);
 
     const created = {
       id: `album-${Date.now()}`,
@@ -767,36 +723,8 @@ export default function GalleryManagement() {
       photoCount: 0,
     };
 
-    if (newAlbumSection === "recentAlbums") {
-      setRecentAlbumPhotos((prev) => ({
-        ...prev,
-        [generatedSlug]: [],
-      }));
-    } else {
-      setAlbumPhotos((prev) => ({
-        ...prev,
-        [generatedSlug]: [],
-      }));
-    }
-
-    if (
-      newAlbumSection ===
-      "recentAlbums"
-    ) {
-      setRecentAlbums(
-        (prev) => [
-          ...prev,
-          created,
-        ]
-      );
-    } else {
-      setAlbums(
-        (prev) => [
-          ...prev,
-          created,
-        ]
-      );
-    }
+    updateSectionPhotos(newAlbumSection, (previous) => ({ ...previous, [generatedSlug]: [] }));
+    updateSectionAlbums(newAlbumSection, (previous) => [...previous, created]);
 
     setNewAlbum({
       name: "",
@@ -819,46 +747,14 @@ export default function GalleryManagement() {
     field: keyof GalleryAdminAlbum,
     value: string
   ) => {
-    if (
-      section ===
-      "recentAlbums"
-    ) {
-      setRecentAlbums(
-        (prev) => {
-          const updated = [
-            ...prev,
-          ];
-
-          updated[index] = {
-            ...updated[index],
-            [field]:
-              field === "slug"
-                ? createSlug(value)
-                : value,
-          };
-
-          return updated;
-        }
-      );
-    } else {
-      setAlbums(
-        (prev) => {
-          const updated = [
-            ...prev,
-          ];
-
-          updated[index] = {
-            ...updated[index],
-            [field]:
-              field === "slug"
-                ? createSlug(value)
-                : value,
-          };
-
-          return updated;
-        }
-      );
-    }
+    updateSectionAlbums(section, (previous) => {
+      const updated = [...previous];
+      updated[index] = {
+        ...updated[index],
+        [field]: field === "slug" ? createSlug(value) : value,
+      };
+      return updated;
+    });
 
     setSaveMsg("");
   };
@@ -872,10 +768,7 @@ export default function GalleryManagement() {
     index: number,
     direction: number
   ) => {
-    const source =
-      section === "recentAlbums"
-        ? recentAlbums
-        : albums;
+    const source = getSectionAlbums(section);
 
     const target =
       index + direction;
@@ -908,18 +801,7 @@ export default function GalleryManagement() {
         })
       );
 
-    if (
-      section ===
-      "recentAlbums"
-    ) {
-      setRecentAlbums(
-        normalized
-      );
-    } else {
-      setAlbums(
-        normalized
-      );
-    }
+    updateSectionAlbums(section, () => normalized);
 
     setSaveMsg("");
   };
@@ -997,10 +879,7 @@ export default function GalleryManagement() {
     section: GallerySection,
     index: number
   ) => {
-    const source =
-      section === "recentAlbums"
-        ? recentAlbums
-        : albums;
+    const source = getSectionAlbums(section);
 
     const album =
       source[index];
@@ -1026,12 +905,7 @@ export default function GalleryManagement() {
        */
 
       const existedBefore =
-        (
-          section ===
-          "recentAlbums"
-            ? originalRecentAlbums
-            : originalAlbums
-        ).some(
+        originalAlbumsBySection[section].some(
           (item) =>
             String(item.id) ===
             String(album.id)
@@ -1066,68 +940,14 @@ export default function GalleryManagement() {
         }
       }
 
-      if (
-        section ===
-        "recentAlbums"
-      ) {
-        setRecentAlbums(
-          (prev) =>
-            prev
-              .filter(
-                (_, i) =>
-                  i !== index
-              )
-              .map(
-                (item, i) => ({
-                  ...item,
-                  order: i,
-                })
-              )
-        );
-
-        setRecentAlbumPhotos(
-          (prev) => {
-            const next = {
-              ...prev,
-            };
-
-            delete next[
-              album.slug
-            ];
-
-            return next;
-          }
-        );
-      } else {
-        setAlbums(
-          (prev) =>
-            prev
-              .filter(
-                (_, i) =>
-                  i !== index
-              )
-              .map(
-                (item, i) => ({
-                  ...item,
-                  order: i,
-                })
-              )
-        );
-
-        setAlbumPhotos(
-          (prev) => {
-            const next = {
-              ...prev,
-            };
-
-            delete next[
-              album.slug
-            ];
-
-            return next;
-          }
-        );
-      }
+      updateSectionAlbums(section, (previous) => previous
+        .filter((_, i) => i !== index)
+        .map((item, i) => ({ ...item, order: i })));
+      updateSectionPhotos(section, (previous) => {
+        const next = { ...previous };
+        delete next[album.slug];
+        return next;
+      });
 
       if (
         expandedAlbumKey ===
@@ -1165,9 +985,7 @@ export default function GalleryManagement() {
     if (!fileList?.length) return;
 
     const key = `photos-${section}-${slug}`;
-    const currentPhotos = section === "recentAlbums"
-      ? recentAlbumPhotos[slug] || []
-      : albumPhotos[slug] || [];
+    const currentPhotos = photosBySection[section][slug] || [];
     const existingQueue = photoQueues[key] || [];
     const pendingCount = existingQueue.filter((photo) => photo.status !== "uploaded").length;
     const available = Math.max(0, MAX_PHOTOS - currentPhotos.length - pendingCount);
@@ -1228,9 +1046,7 @@ export default function GalleryManagement() {
       : photo.status === "queued");
     if (!candidates.length) return;
 
-    const currentPhotos = section === "recentAlbums"
-      ? recentAlbumPhotos[slug] || []
-      : albumPhotos[slug] || [];
+    const currentPhotos = photosBySection[section][slug] || [];
     const remaining = Math.max(0, MAX_PHOTOS - currentPhotos.length);
     if (candidates.length > remaining) {
       setErrMsg(`This album has room for only ${remaining} more photos.`);
@@ -1241,9 +1057,8 @@ export default function GalleryManagement() {
     setUploadingState((prev) => ({ ...prev, [key]: true }));
     setErrMsg("");
 
-    const isRecent = section === "recentAlbums";
-    const category = `${isRecent ? "recent" : "gallery"}:${slug}`;
-    const folder = `san-photography/gallery/${isRecent ? "recent" : slug}`;
+    const category = getMediaCategory(section, slug);
+    const folder = getMediaFolder(section, slug);
     const uploadedMedia = new Map<string, CloudinaryUploadResult>();
     let nextIndex = 0;
 
@@ -1296,7 +1111,7 @@ export default function GalleryManagement() {
       if (retryCandidates.length) {
         const existingResponse = await fetch(
           `${API_BASE_URL}/api/gallery.php?slug=${encodeURIComponent(slug)}&section=${encodeURIComponent(section)}&include_inactive=1`,
-          { headers: authenticatedHeaders() }
+          { headers: authenticatedHeaders(), cache: "no-store" }
         );
         const existingData = await parseApiResponse(existingResponse);
         if (!existingResponse.ok || !existingData.success) {
@@ -1453,10 +1268,7 @@ export default function GalleryManagement() {
       try {
         setErrMsg("");
 
-        const isRecent =
-          section === "recentAlbums";
-        const category =
-          isRecent ? `recent:${slug}` : `gallery:${slug}`;
+        const category = getMediaCategory(section, slug);
 
         const response =
           await fetch(
@@ -1519,18 +1331,7 @@ export default function GalleryManagement() {
       direction: number,
       dropTarget?: number
     ) => {
-      const isRecent =
-        section ===
-        "recentAlbums";
-
-      const list =
-        isRecent
-          ? recentAlbumPhotos[
-              slug
-            ] || []
-          : albumPhotos[
-              slug
-            ] || [];
+      const list = photosBySection[section][slug] || [];
 
       const target = dropTarget ?? photoIndex + direction;
 
@@ -1555,23 +1356,7 @@ export default function GalleryManagement() {
           })
         );
 
-      if (isRecent) {
-        setRecentAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]:
-              reordered,
-          })
-        );
-      } else {
-        setAlbumPhotos(
-          (prev) => ({
-            ...prev,
-            [slug]:
-              reordered,
-          })
-        );
-      }
+      updateSectionPhotos(section, (previous) => ({ ...previous, [slug]: reordered }));
 
       try {
         const response =
@@ -1657,12 +1442,7 @@ export default function GalleryManagement() {
       activePhotoQueueKeysRef.current.add(replacementKey);
       setUploadingState((prev) => ({ ...prev, [replacementKey]: true }));
 
-      const isRecent =
-        section ===
-        "recentAlbums";
-
-      const folder =
-        `san-photography/gallery/${isRecent ? "recent" : slug}`;
+      const folder = getMediaFolder(section, slug);
 
       try {
         setErrMsg("");
@@ -1770,10 +1550,27 @@ export default function GalleryManagement() {
       setSaveMsg("");
       setErrMsg("");
 
-      const allAlbums = [
-        ...albums,
-        ...recentAlbums,
-      ];
+      const normalizedAlbumsBySection = Object.fromEntries(
+        GALLERY_SECTIONS.map((section) => [
+          section,
+          getSectionAlbums(section).map((album, index) => ({
+            ...album,
+            id: String(album.id || `${section}-${index}`),
+            slug: createSlug(album.slug),
+            name: album.name.trim(),
+            location: album.location?.trim() || "",
+            image: album.image || "",
+            order: index,
+          })),
+        ])
+      ) as Record<GallerySection, GalleryAdminAlbum[]>;
+      const allAlbums = GALLERY_SECTIONS.flatMap((section) => normalizedAlbumsBySection[section]);
+
+      for (const section of GALLERY_SECTIONS) {
+        if (normalizedAlbumsBySection[section].length > MAX_ALBUMS_BY_SECTION[section]) {
+          throw new Error(`Maximum ${MAX_ALBUMS_BY_SECTION[section]} ${GALLERY_SECTION_LABELS[section]} albums are allowed.`);
+        }
+      }
 
       /* -----------------------------------------------------
          TOTAL CARD LIMIT
@@ -1784,84 +1581,15 @@ export default function GalleryManagement() {
         MAX_CARDS
       ) {
         throw new Error(
-          `Maximum ${MAX_CARDS} Gallery + Recent cards are allowed.`
+          `Maximum ${MAX_CARDS} albums are allowed across all gallery categories.`
         );
       }
-
-      /* -----------------------------------------------------
-         NORMALIZE PHOTO GALLERY
-      ----------------------------------------------------- */
-
-      const normalizedAlbums =
-        albums.map(
-          (album, index) => ({
-            ...album,
-
-            id: String(
-              album.id ||
-                `album-${index}`
-            ),
-
-            slug: createSlug(
-              album.slug
-            ),
-
-            name:
-              album.name.trim(),
-
-            location:
-              album.location?.trim() ||
-              "",
-
-            image:
-              album.image || "",
-
-            order: index,
-          })
-        );
-
-      /* -----------------------------------------------------
-         NORMALIZE RECENT ALBUMS
-      ----------------------------------------------------- */
-
-      const normalizedRecentAlbums =
-        recentAlbums.map(
-          (album, index) => ({
-            ...album,
-
-            id: String(
-              album.id ||
-                `recent-${index}`
-            ),
-
-            slug: createSlug(
-              album.slug
-            ),
-
-            name:
-              album.name.trim(),
-
-            location:
-              album.location?.trim() ||
-              "",
-
-            image:
-              album.image || "",
-
-            order: index,
-          })
-        );
 
       /* -----------------------------------------------------
          VALIDATE
       ----------------------------------------------------- */
 
-      for (
-        const album of [
-          ...normalizedAlbums,
-          ...normalizedRecentAlbums,
-        ]
-      ) {
+      for (const album of allAlbums) {
         if (!album.name) {
           throw new Error(
             "Every album must have a name."
@@ -1878,19 +1606,14 @@ export default function GalleryManagement() {
       const slugSet =
         new Set();
 
-      for (
-        const album of [
-          ...normalizedAlbums,
-          ...normalizedRecentAlbums,
-        ]
-      ) {
+      for (const album of allAlbums) {
         if (
           slugSet.has(
             album.slug
           )
         ) {
           throw new Error(
-            `Duplicate slug "${album.slug}". Slugs must be unique across Photo Gallery and Recent.`
+            `Duplicate slug "${album.slug}". Slugs must be unique across all gallery categories.`
           );
         }
 
@@ -1903,24 +1626,11 @@ export default function GalleryManagement() {
          HANDLE EXISTING ALBUM SLUG CHANGES
       ----------------------------------------------------- */
 
-      const existingSections = [
-        {
-          current:
-            normalizedAlbums,
-          original:
-            originalAlbums,
-          section:
-            "couples",
-        },
-        {
-          current:
-            normalizedRecentAlbums,
-          original:
-            originalRecentAlbums,
-          section:
-            "recentAlbums",
-        },
-      ];
+      const existingSections = GALLERY_SECTIONS.map((section) => ({
+        current: normalizedAlbumsBySection[section],
+        original: originalAlbumsBySection[section],
+        section,
+      }));
 
       for (
         const group of existingSections
@@ -2014,64 +1724,14 @@ export default function GalleryManagement() {
              * Move local photo state.
              */
 
-            if (
-              group.section ===
-              "recentAlbums"
-            ) {
-              setRecentAlbumPhotos(
-                (prev) => {
-                  const next = {
-                    ...prev,
-                  };
-
-                  if (
-                    next[
-                      previousAlbum.slug
-                    ]
-                  ) {
-                    next[
-                      nextAlbum.slug
-                    ] =
-                      next[
-                        previousAlbum.slug
-                      ];
-
-                    delete next[
-                      previousAlbum.slug
-                    ];
-                  }
-
-                  return next;
-                }
-              );
-            } else {
-              setAlbumPhotos(
-                (prev) => {
-                  const next = {
-                    ...prev,
-                  };
-
-                  if (
-                    next[
-                      previousAlbum.slug
-                    ]
-                  ) {
-                    next[
-                      nextAlbum.slug
-                    ] =
-                      next[
-                        previousAlbum.slug
-                      ];
-
-                    delete next[
-                      previousAlbum.slug
-                    ];
-                  }
-
-                  return next;
-                }
-              );
-            }
+            updateSectionPhotos(group.section, (previous) => {
+              const next = { ...previous };
+              if (next[previousAlbum.slug]) {
+                next[nextAlbum.slug] = next[previousAlbum.slug];
+                delete next[previousAlbum.slug];
+              }
+              return next;
+            });
           }
         }
       }
@@ -2093,11 +1753,9 @@ export default function GalleryManagement() {
                 gallery: {
                   ...header,
 
-                  couples:
-                    normalizedAlbums,
-
-                  recentAlbums:
-                    normalizedRecentAlbums,
+                  wedding: normalizedAlbumsBySection.wedding,
+                  engagement: normalizedAlbumsBySection.engagement,
+                  preWedding: normalizedAlbumsBySection.preWedding,
                 },
               },
             }),
@@ -2151,27 +1809,8 @@ export default function GalleryManagement() {
     slug,
     name,
   }: { section: GallerySection; slug: string; name: string }) => {
-    const isRecent =
-      section ===
-      "recentAlbums";
-
-    const photos =
-      isRecent
-        ? recentAlbumPhotos[
-            slug
-          ] || []
-        : albumPhotos[
-            slug
-          ] || [];
-
-    const isLoading =
-      isRecent
-        ? loadingRecentAlbumPhotos[
-            slug
-          ]
-        : loadingAlbumPhotos[
-            slug
-          ];
+    const photos = photosBySection[section][slug] || [];
+    const isLoading = loadingPhotosBySection[section][slug];
 
     const photoCount =
       photos.length;
@@ -2226,9 +1865,7 @@ export default function GalleryManagement() {
             <p className="text-[11px] text-neutral-400 mt-1">
               MySQL category:{" "}
               <code className="text-[#9b7740] font-mono">
-                {isRecent
-                  ? `recent:${slug}`
-                  : `gallery:${slug}`}
+                {getMediaCategory(section, slug)}
               </code>
             </p>
           </div>
@@ -2590,10 +2227,6 @@ export default function GalleryManagement() {
     index,
     section,
   }: { album: GalleryAdminAlbum; index: number; section: GallerySection }) => {
-    const isRecent =
-      section ===
-      "recentAlbums";
-
     const expandedKey =
       `${section}:${album.slug}`;
 
@@ -2601,18 +2234,8 @@ export default function GalleryManagement() {
       expandedAlbumKey ===
       expandedKey;
 
-    const photos =
-      isRecent
-        ? recentAlbumPhotos[
-            album.slug
-          ] || []
-        : albumPhotos[
-            album.slug
-          ] || [];
-
-    const hasLoadedPhotos = isRecent
-      ? recentAlbumPhotos[album.slug] !== undefined
-      : albumPhotos[album.slug] !== undefined;
+    const photos = photosBySection[section][album.slug] || [];
+    const hasLoadedPhotos = photosBySection[section][album.slug] !== undefined;
 
     const photoCount =
       hasLoadedPhotos
@@ -2826,13 +2449,7 @@ export default function GalleryManagement() {
             <button
               title="Move Down"
               disabled={
-                index ===
-                (
-                  isRecent
-                    ? recentAlbums
-                    : albums
-                ).length -
-                  1
+                index === getSectionAlbums(section).length - 1
               }
               onClick={() =>
                 handleMoveAlbum(
@@ -2967,7 +2584,7 @@ export default function GalleryManagement() {
             </h1>
 
             <p className="text-xs text-neutral-400 mt-1">
-              Photo Gallery + Recent Albums • Maximum {MAX_CARDS} cards • {MAX_PHOTOS} photos per card
+              Wedding, Engagement, and Pre Wedding • Maximum {MAX_CARDS} albums • {MAX_PHOTOS} photos per album
             </p>
 
           </div>
@@ -3190,14 +2807,11 @@ export default function GalleryManagement() {
               </span>
 
               <h2 className="text-xl font-normal text-neutral-800 tracking-tight mt-0.5">
-                Photo Gallery Albums ({albums.length})
+                Wedding Albums ({albumsBySection.wedding.length}/{MAX_ALBUMS_BY_SECTION.wedding})
               </h2>
 
               <p className="text-xs text-neutral-400 mt-1">
-                {albums.length} Photo Gallery card
-                {albums.length === 1
-                  ? ""
-                  : "s"} • Maximum {MAX_PHOTOS} photos per album.
+                Maximum {MAX_ALBUMS_BY_SECTION.wedding} albums • Maximum {MAX_PHOTOS} photos per album.
               </p>
 
             </div>
@@ -3205,16 +2819,14 @@ export default function GalleryManagement() {
             <button
               onClick={() =>
                 openAddAlbum(
-                  "couples"
+                  "wedding"
                 )
               }
               disabled={
-                albums.length >= MAX_COUPLES_CARDS ||
-                totalCards >= MAX_CARDS
+                isAtAlbumLimit("wedding") || totalCards >= MAX_CARDS
               }
               className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs uppercase tracking-[0.15em] font-medium self-start sm:self-auto ${
-                albums.length >= MAX_COUPLES_CARDS ||
-                totalCards >= MAX_CARDS
+                isAtAlbumLimit("wedding") || totalCards >= MAX_CARDS
                   ? "bg-neutral-300 text-neutral-500 cursor-not-allowed"
                   : "bg-neutral-900 text-white hover:bg-neutral-800"
               }`}
@@ -3237,7 +2849,7 @@ export default function GalleryManagement() {
               </p>
 
               <p className="text-[11px] text-neutral-400 mt-0.5">
-                Photo Gallery + Recent combined
+                All categories combined
               </p>
 
             </div>
@@ -3259,10 +2871,10 @@ export default function GalleryManagement() {
           {/* ADD ALBUM */}
 
           {showAddAlbum &&
-            newAlbumSection ===
-              "couples" && (
+              newAlbumSection ===
+              "wedding" && (
               <AddAlbumForm
-                section="couples"
+                section="wedding"
                 newAlbum={
                   newAlbum
                 }
@@ -3284,23 +2896,22 @@ export default function GalleryManagement() {
 
           <div className="space-y-4">
 
-            {albums.length ===
+            {albumsBySection.wedding.length ===
             0 ? (
               <EmptyAlbumState
-                title="No Photo Gallery albums"
-                description="Create your first Photo Gallery album."
+                title="No Wedding albums"
+                description="Create your first Wedding album."
                 onAdd={() =>
                   openAddAlbum(
-                    "couples"
+                    "wedding"
                   )
                 }
                 disabled={
-                  totalCards >=
-                  MAX_CARDS
+                  isAtAlbumLimit("wedding") || totalCards >= MAX_CARDS
                 }
               />
             ) : (
-              albums.map(
+              albumsBySection.wedding.map(
                 (
                   album,
                   index
@@ -3308,8 +2919,7 @@ export default function GalleryManagement() {
                   renderAlbumCard({
                     album,
                     index,
-                    section:
-                      "couples",
+                    section: "wedding",
                   })
               )
             )}
@@ -3319,7 +2929,7 @@ export default function GalleryManagement() {
         </section>
 
         {/* ===================================================
-            SECTION 03 — RECENT ALBUMS
+            SECTION 03 — ENGAGEMENT ALBUMS
         =================================================== */}
 
         <section className="bg-white rounded-xl border border-neutral-200/80 p-6 sm:p-8 shadow-sm">
@@ -3333,11 +2943,11 @@ export default function GalleryManagement() {
               </span>
 
               <h2 className="text-xl font-normal text-neutral-800 tracking-tight mt-0.5">
-                Recent Albums ({recentAlbums.length})
+                Engagement Albums ({albumsBySection.engagement.length}/{MAX_ALBUMS_BY_SECTION.engagement})
               </h2>
 
               <p className="text-xs text-neutral-400 mt-1">
-                Recent works are also managed as albums/cards. Each Recent card supports up to {MAX_PHOTOS} photos.
+                Maximum {MAX_ALBUMS_BY_SECTION.engagement} albums • Maximum {MAX_PHOTOS} photos per album.
               </p>
 
             </div>
@@ -3345,16 +2955,14 @@ export default function GalleryManagement() {
             <button
               onClick={() =>
                 openAddAlbum(
-                  "recentAlbums"
+                  "engagement"
                 )
               }
               disabled={
-                recentAlbums.length >= MAX_RECENT_CARDS ||
-                totalCards >= MAX_CARDS
+                isAtAlbumLimit("engagement") || totalCards >= MAX_CARDS
               }
               className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs uppercase tracking-[0.15em] font-medium self-start sm:self-auto ${
-                recentAlbums.length >= MAX_RECENT_CARDS ||
-                totalCards >= MAX_CARDS
+                isAtAlbumLimit("engagement") || totalCards >= MAX_CARDS
                   ? "bg-neutral-300 text-neutral-500 cursor-not-allowed"
                   : "bg-neutral-900 text-white hover:bg-neutral-800"
               }`}
@@ -3362,7 +2970,7 @@ export default function GalleryManagement() {
 
               <Plus className="w-3.5 h-3.5" />
 
-              Add Recent Album
+              Add Engagement Album
 
             </button>
 
@@ -3372,9 +2980,9 @@ export default function GalleryManagement() {
 
           {showAddAlbum &&
             newAlbumSection ===
-              "recentAlbums" && (
+              "engagement" && (
               <AddAlbumForm
-                section="recentAlbums"
+                section="engagement"
                 newAlbum={
                   newAlbum
                 }
@@ -3396,23 +3004,22 @@ export default function GalleryManagement() {
 
           <div className="space-y-4">
 
-            {recentAlbums.length ===
+            {albumsBySection.engagement.length ===
             0 ? (
               <EmptyAlbumState
-                title="No Recent albums"
-                description="Create a Recent album and upload its photos progressively."
+                title="No Engagement albums"
+                description="Create an Engagement album and upload its photos progressively."
                 onAdd={() =>
                   openAddAlbum(
-                    "recentAlbums"
+                    "engagement"
                   )
                 }
                 disabled={
-                  totalCards >=
-                  MAX_CARDS
+                  isAtAlbumLimit("engagement") || totalCards >= MAX_CARDS
                 }
               />
             ) : (
-              recentAlbums.map(
+              albumsBySection.engagement.map(
                 (
                   album,
                   index
@@ -3420,8 +3027,7 @@ export default function GalleryManagement() {
                   renderAlbumCard({
                     album,
                     index,
-                    section:
-                      "recentAlbums",
+                    section: "engagement",
                   })
               )
             )}
@@ -3430,8 +3036,51 @@ export default function GalleryManagement() {
 
         </section>
 
+        <section className="bg-white rounded-xl border border-neutral-200/80 p-6 sm:p-8 shadow-sm">
+          <div className="border-b border-neutral-100 pb-4 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#9b7740]">SECTION 04</span>
+              <h2 className="text-xl font-normal text-neutral-800 tracking-tight mt-0.5">
+                Pre Wedding Albums ({albumsBySection.preWedding.length}/{MAX_ALBUMS_BY_SECTION.preWedding})
+              </h2>
+              <p className="text-xs text-neutral-400 mt-1">Maximum {MAX_ALBUMS_BY_SECTION.preWedding} albums • Maximum {MAX_PHOTOS} photos per album.</p>
+            </div>
+            <button
+              onClick={() => openAddAlbum("preWedding")}
+              disabled={isAtAlbumLimit("preWedding") || totalCards >= MAX_CARDS}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs uppercase tracking-[0.15em] font-medium self-start sm:self-auto ${isAtAlbumLimit("preWedding") || totalCards >= MAX_CARDS ? "bg-neutral-300 text-neutral-500 cursor-not-allowed" : "bg-neutral-900 text-white hover:bg-neutral-800"}`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Pre Wedding Album
+            </button>
+          </div>
+
+          {showAddAlbum && newAlbumSection === "preWedding" && (
+            <AddAlbumForm
+              section="preWedding"
+              newAlbum={newAlbum}
+              setNewAlbum={setNewAlbum}
+              onConfirm={handleAddAlbum}
+              onCancel={() => setShowAddAlbum(false)}
+            />
+          )}
+
+          <div className="space-y-4">
+            {albumsBySection.preWedding.length === 0 ? (
+              <EmptyAlbumState
+                title="No Pre Wedding albums"
+                description="Create a Pre Wedding album and upload its photos progressively."
+                onAdd={() => openAddAlbum("preWedding")}
+                disabled={isAtAlbumLimit("preWedding") || totalCards >= MAX_CARDS}
+              />
+            ) : (
+              albumsBySection.preWedding.map((album, index) => renderAlbumCard({ album, index, section: "preWedding" }))
+            )}
+          </div>
+        </section>
+
         {/* ===================================================
-            SECTION 04 — CTA
+            SECTION 05 — CTA
         =================================================== */}
 
         <section className="bg-white rounded-xl border border-neutral-200/80 p-6 sm:p-8 shadow-sm">
@@ -3625,7 +3274,7 @@ export default function GalleryManagement() {
           <div>
 
             <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#9b7740]">
-              SECTION 05 — PERSISTENCE
+              SECTION 06 — PERSISTENCE
             </span>
 
             <h3 className="text-lg font-light tracking-tight mt-1">
@@ -3647,9 +3296,11 @@ export default function GalleryManagement() {
             <p className="text-[11px] text-neutral-500 mt-2">
               Total cards: {totalCards}/{MAX_CARDS}
               {" • "}
-              Photo Gallery: {albums.length}
+              Wedding: {albumsBySection.wedding.length}
               {" • "}
-              Recent: {recentAlbums.length}
+              Engagement: {albumsBySection.engagement.length}
+              {" • "}
+              Pre Wedding: {albumsBySection.preWedding.length}
               {" • "}
               Maximum photos/card: {MAX_PHOTOS}
             </p>
@@ -3690,9 +3341,7 @@ function AddAlbumForm({
   onConfirm,
   onCancel,
 }: { section: GallerySection; newAlbum: Pick<GalleryAdminAlbum, "name" | "slug" | "location" | "image">; setNewAlbum: React.Dispatch<React.SetStateAction<Pick<GalleryAdminAlbum, "name" | "slug" | "location" | "image">>>; onConfirm: () => void; onCancel: () => void }) {
-  const isRecent =
-    section ===
-    "recentAlbums";
+  const sectionLabel = GALLERY_SECTION_LABELS[section];
 
   return (
     <div className="mb-8 p-5 bg-[#faf8f5] border border-[#e8dfd1] rounded-lg">
@@ -3703,9 +3352,7 @@ function AddAlbumForm({
 
           <h3 className="text-sm font-semibold text-neutral-800 uppercase tracking-[0.1em]">
             Create New{" "}
-            {isRecent
-              ? "Recent Album"
-              : "Photo Gallery Album"}
+            {sectionLabel} Album
           </h3>
 
           <p className="text-[11px] text-neutral-400 mt-1">
@@ -3715,9 +3362,7 @@ function AddAlbumForm({
         </div>
 
         <span className="text-[10px] uppercase tracking-[0.15em] text-[#9b7740] font-semibold">
-          {isRecent
-            ? "RECENT"
-            : "PHOTO GALLERY"}
+          {sectionLabel.toUpperCase()}
         </span>
 
       </div>
