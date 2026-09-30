@@ -15,6 +15,34 @@ export function buildApiUrl(baseUrl: string, endpoint: string): string {
     return `${base}/${path}`;
 }
 
+const inFlightApiJsonRequests = new Map<string, Promise<unknown>>();
+
+export function fetchApiJson<T = any>(url: string, endpoint: string, init: RequestInit = {}): Promise<T> {
+    const existingRequest = inFlightApiJsonRequests.get(url);
+    if (existingRequest) {
+        return existingRequest as Promise<T>;
+    }
+
+    const request = fetch(url, {
+        ...init,
+        cache: init.cache ?? 'no-store',
+    })
+        .then(async response => {
+            if (!response.ok) {
+                throw new Error(`${endpoint} API returned HTTP ${response.status}.`);
+            }
+            return readApiJson<T>(response, endpoint);
+        })
+        .finally(() => {
+            if (inFlightApiJsonRequests.get(url) === request) {
+                inFlightApiJsonRequests.delete(url);
+            }
+        });
+
+    inFlightApiJsonRequests.set(url, request);
+    return request;
+}
+
 export async function readApiJson<T = any>(response: Response, endpoint: string): Promise<T> {
     const contentType = response.headers.get('content-type') || '';
     const body = await response.text();

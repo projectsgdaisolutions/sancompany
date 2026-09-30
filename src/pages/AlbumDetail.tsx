@@ -398,8 +398,8 @@ export default function AlbumDetail() {
                     src={src}
                     alt={`${couple.name} - Moment ${index + 1}`}
                     className="w-full h-auto block object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                    loading={index < 4 ? 'eager' : 'lazy'}
-                    fetchPriority={index < 4 ? 'high' : 'auto'}
+                    loading={index < 2 ? 'eager' : 'lazy'}
+                    fetchPriority={index < 2 ? 'high' : 'auto'}
                     decoding="async"
                   />
                 </motion.div>

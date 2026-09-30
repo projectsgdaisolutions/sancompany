@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { FaInstagram, FaFacebookF, FaLinkedinIn, FaYoutube } from 'react-icons/fa'
-import { API_URL, readApiJson } from '../services/api'
+import { API_URL, fetchApiJson } from '../services/api'
 
 /* =========================================================
    API (Make sure this matches your main app's API URL)
@@ -30,8 +30,7 @@ function Footer() {
   useEffect(() => {
     const fetchSocialMedia = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/content.php`)
-        const data = await readApiJson(response, 'Footer content')
+        const data = await fetchApiJson(`${API_BASE_URL}/api/content.php`, 'Footer content')
         if (data.success && data.content && data.content.contact) {
           const contact = data.content.contact
           setSocialMedia({

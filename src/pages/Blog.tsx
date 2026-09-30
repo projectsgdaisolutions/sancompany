@@ -228,14 +228,14 @@ function useGoogleFonts() {
   }, [])
 }
 
-function useReveal(threshold = 0.12) {
+function useReveal(threshold = 0.12, enabled = true) {
   const ref = useRef<HTMLElement | null>(null)
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
     const element = ref.current
 
-    if (!element) {
+    if (!enabled || !element) {
       return
     }
 
@@ -255,7 +255,7 @@ function useReveal(threshold = 0.12) {
     observer.observe(element)
 
     return () => observer.disconnect()
-  }, [threshold])
+  }, [threshold, enabled])
 
   return [ref, visible] as const
 }
@@ -274,26 +274,47 @@ function AutoPlayVideo({
   className,
 }: AutoPlayVideoProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [shouldLoad, setShouldLoad] = useState(false)
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = true
+    const video = videoRef.current
+    if (!video) return
 
-      videoRef.current
-        .play()
-        .catch(() => {})
+    if (typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true)
+      return
     }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldLoad(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px 0px' },
+    )
+
+    observer.observe(video)
+    return () => observer.disconnect()
   }, [src])
+
+  useEffect(() => {
+    if (!shouldLoad || !videoRef.current) return
+
+    videoRef.current.muted = true
+    videoRef.current.play().catch(() => {})
+  }, [src, shouldLoad])
 
   return (
     <video
       ref={videoRef}
-      src={src}
+      src={shouldLoad ? src : undefined}
       autoPlay
       muted
       loop
       playsInline
-      preload="metadata"
+      preload={shouldLoad ? 'metadata' : 'none'}
       className={className}
     />
   )
@@ -446,8 +467,8 @@ function BlogCard({
               post.image
             }
             alt={post.title}
-            loading={index < 3 ? 'eager' : 'lazy'}
-            fetchPriority={index < 3 ? 'high' : 'auto'}
+            loading="lazy"
+            fetchPriority="auto"
             decoding="async"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-[1200ms] ease-out group-hover:scale-105"
           />
@@ -504,14 +525,14 @@ function Blog() {
    * Now the page always starts with valid default content.
    * Once MySQL API succeeds, the dynamic DB content replaces it.
    */
-  const [blogContent, setBlogContent] = useState<BlogContent>(DEFAULT_BLOG_CONTENT)
+  const [blogContent, setBlogContent] = useState<BlogContent | null>(null)
 
   const [selectedMedia, setSelectedMedia] = useState<BlogPost | null>(null)
 
   const [
     storiesRef,
     storiesVisible,
-  ] = useReveal()
+  ] = useReveal(0.12, Boolean(blogContent))
 
   /* =======================================================
      FETCH DYNAMIC BLOG CONTENT
@@ -524,12 +545,11 @@ function Blog() {
       async () => {
         try {
           /*
-           * Cache-busting query parameter prevents an old
-           * response from being reused by the browser.
+           * The API also sends no-store cache headers.
            */
           const response =
             await fetch(
-              `${BLOG_API_URL}/api/blog.php?t=${Date.now()}`,
+              `${BLOG_API_URL}/api/blog.php`,
               {
                 method: 'GET',
                 cache: 'no-store',
@@ -639,13 +659,8 @@ function Blog() {
           /*
            * IMPORTANT:
            *
-           * Only update state after receiving a valid
-           * database response.
-           *
-           * If the API fails, the current valid state
-           * remains on screen.
-           *
-           * We do NOT set posts to [].
+           * Only replace the loading state after receiving
+           * a valid database response.
            */
           if (isMounted) {
             setBlogContent({
@@ -689,10 +704,8 @@ function Blog() {
           /*
            * IMPORTANT:
            *
-           * Do NOT clear blogContent here.
-           *
-           * If API temporarily fails, the previous valid
-           * content stays visible.
+           * Keep the neutral loading state on failure rather
+           * than showing baked-in content as if it were current.
            */
           console.error(
             'Blog content fetch error:',
@@ -707,6 +720,38 @@ function Blog() {
       isMounted = false
     }
   }, [])
+
+  if (!blogContent) {
+    return (
+      <main
+        aria-busy="true"
+        aria-label="Loading blog"
+        className="min-h-screen overflow-hidden bg-[#F9F7F2] px-4 pt-32 text-[#171717] sm:px-6 sm:pt-36 lg:px-8"
+      >
+        <section className="mx-auto max-w-5xl animate-pulse">
+          <div className="grid overflow-hidden bg-[#F0EDE6] lg:grid-cols-2">
+            <div className="aspect-video bg-black/[0.06]" />
+            <div className="flex flex-col justify-center gap-3 p-6">
+              <div className="h-3 w-20 bg-black/10" />
+              <div className="h-7 max-w-sm bg-black/[0.06]" />
+              <div className="h-3 max-w-md bg-black/[0.06]" />
+            </div>
+          </div>
+        </section>
+        <section
+          ref={storiesRef}
+          className="mx-auto mt-8 max-w-5xl border-t border-black/10 pt-5"
+        >
+          <div className="mb-5 h-6 w-40 animate-pulse bg-black/[0.06]" />
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 lg:gap-5">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="aspect-[4/5] animate-pulse bg-black/[0.06]" />
+            ))}
+          </div>
+        </section>
+      </main>
+    )
+  }
 
   /* =======================================================
      DISPLAY BLOG
@@ -813,6 +858,9 @@ function Blog() {
                         alt={
                           featuredPost.title
                         }
+                        loading="eager"
+                        fetchPriority="high"
+                        decoding="async"
                         className="absolute inset-0 h-full w-full object-cover"
                       />
                     ) : (

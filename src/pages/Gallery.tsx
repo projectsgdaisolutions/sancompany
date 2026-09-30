@@ -8,7 +8,7 @@ import {
   useInView,
 } from "framer-motion";
 import type { GalleryCouple } from "../types";
-import { API_URL, readApiJson } from "../services/api";
+import { API_URL, fetchApiJson } from "../services/api";
 import AlbumDetail from "./AlbumDetail";
 
 const API_BASE_URL = API_URL;
@@ -443,7 +443,7 @@ function Gallery() {
   useGoogleFonts();
 
   const { slug } = useParams();
-  const [galleryContent, setGalleryContent] = useState<GalleryContent>(DEFAULT_GALLERY);
+  const [galleryContent, setGalleryContent] = useState<GalleryContent | null>(null);
   const [activeFilter, setActiveFilter] = useState<"wedding" | "engagement" | "preWedding">("wedding");
 
   useEffect(() => {
@@ -454,12 +454,15 @@ function Gallery() {
     // Fetch Gallery metadata from PHP API
     const fetchGalleryContent = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/content.php`, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Content request failed: ${response.status}`);
+        const data = await fetchApiJson(`${API_BASE_URL}/api/content.php`, 'Gallery');
+        if (!data.success) {
+          throw new Error(data.message || "Gallery content could not be loaded.");
         }
-        const data = await readApiJson(response, 'Gallery');
-        if (isMounted && data.success && data.content?.gallery) {
+        if (
+          isMounted &&
+          data.content?.gallery &&
+          typeof data.content.gallery === "object"
+        ) {
           setGalleryContent(mergeGallery(data.content.gallery));
         }
       } catch (error) {
@@ -476,6 +479,27 @@ function Gallery() {
 
   if (slug) {
     return <AlbumDetail />;
+  }
+
+  if (!galleryContent) {
+    return (
+      <main
+        aria-busy="true"
+        aria-label="Loading gallery"
+        className="min-h-screen bg-[#FAFAF8] px-8 pb-16 pt-28 sm:px-12 sm:pt-32 lg:px-24"
+      >
+        <div className="mx-auto max-w-5xl animate-pulse">
+          <div className="h-3 w-24 bg-black/10" />
+          <div className="mt-5 h-12 max-w-md bg-black/10" />
+          <div className="mt-4 h-3 max-w-xl bg-black/10" />
+          <div className="mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {Array.from({ length: 8 }, (_, index) => (
+              <div key={index} className="aspect-[5/6] bg-black/[0.06]" />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   const {

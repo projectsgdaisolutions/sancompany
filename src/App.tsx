@@ -1,18 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 
 /* =====================================================
    PUBLIC PAGES
 ===================================================== */
 
-import Home from "./pages/Home";
-import About from "./pages/About";
-import Portfolio from "./pages/Portfolio";
-import Gallery from "./pages/Gallery";
-import Films from "./pages/Films";
-import Blog from "./pages/Blog";
-import Careers from "./pages/Careers";
-import Contact from "./pages/Contact";
+const Home = lazy(() => import("./pages/Home"));
+const About = lazy(() => import("./pages/About"));
+const Portfolio = lazy(() => import("./pages/Portfolio"));
+const Gallery = lazy(() => import("./pages/Gallery"));
+const Films = lazy(() => import("./pages/Films"));
+const Blog = lazy(() => import("./pages/Blog"));
+const Careers = lazy(() => import("./pages/Careers"));
+const Contact = lazy(() => import("./pages/Contact"));
 
 /* =====================================================
    PUBLIC COMPONENTS
@@ -25,20 +25,18 @@ import Footer from "./components/Footer";
    ADMIN PAGES
 ===================================================== */
 
-import AdminLogin from "./admin/AdminLogin";
-import ForgotPassword from "./admin/ForgotPassword";
-import ResetPassword from "./admin/ResetPassword";
-import AdminLayout from "./admin/AdminLayout";
-import Dashboard from "./admin/Dashboard";
-import HomePageManagement from "./admin/HomePageManagement";
-import AboutPageManagement from "./admin/AboutPageManagement";
-import PortfolioManagement from "./admin/PortfolioManagement";
-import GalleryManagement from "./admin/GalleryManagement";
-import FilmManagement from "./admin/FilmManagement";
-
-import BlogManagement from "./admin/BlogManagement";
-import ContactManagement from "./admin/ContactManagement";
-import CareerManagement from "./admin/CareerManagement";
+const AdminLogin = lazy(() => import("./admin/AdminLogin"));
+const ForgotPassword = lazy(() => import("./admin/ForgotPassword"));
+const ResetPassword = lazy(() => import("./admin/ResetPassword"));
+const AdminLayout = lazy(() => import("./admin/AdminLayout"));
+const HomePageManagement = lazy(() => import("./admin/HomePageManagement"));
+const AboutPageManagement = lazy(() => import("./admin/AboutPageManagement"));
+const PortfolioManagement = lazy(() => import("./admin/PortfolioManagement"));
+const GalleryManagement = lazy(() => import("./admin/GalleryManagement"));
+const FilmManagement = lazy(() => import("./admin/FilmManagement"));
+const BlogManagement = lazy(() => import("./admin/BlogManagement"));
+const ContactManagement = lazy(() => import("./admin/ContactManagement"));
+const CareerManagement = lazy(() => import("./admin/CareerManagement"));
 import { apiUrl, readApiJson } from "./services/api";
 
 /* =====================================================
@@ -119,6 +117,27 @@ function PublicLayout({
   );
 }
 
+function RouteLoading() {
+  return (
+    <main
+      aria-busy="true"
+      aria-label="Loading page"
+      className="min-h-screen bg-[#f3f0e9] px-6 pt-28"
+    >
+      <div className="mx-auto max-w-6xl">
+        <div className="h-3 w-24 bg-black/10" />
+        <div className="mt-5 h-10 max-w-md bg-black/10" />
+        <div className="mt-3 h-3 max-w-lg bg-black/10" />
+        <div className="mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="aspect-[4/5] bg-black/[0.06]" />
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
 /* =====================================================
    APP
 ===================================================== */
@@ -158,6 +177,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<RouteLoading />}>
       <Routes>
 
         {/* =================================================
@@ -446,6 +466,7 @@ function App() {
         />
 
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

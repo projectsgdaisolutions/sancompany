@@ -9,7 +9,7 @@ import {
   Maximize2,
   X,
 } from "lucide-react";
-import { API_URL, readApiJson } from "../services/api";
+import { API_URL, fetchApiJson } from "../services/api";
 import {
   FILM_CATEGORY_DEFINITIONS,
   normalizeFilmCategory,
@@ -131,38 +131,55 @@ function HeroVideo({
   heading,
 }: HeroVideoProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
 
   useEffect(() => {
-    if (
-      !videoRef.current ||
-      !videoUrl
-    ) {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoadVideo(true);
       return;
     }
 
-    videoRef.current.muted = true;
-
-    videoRef.current
-      .play()
-      .catch(() => { });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldLoadVideo(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+    observer.observe(section);
+    return () => observer.disconnect();
   }, [videoUrl]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!shouldLoadVideo || !video) return;
+
+    video.muted = true;
+    video.play().catch(() => { });
+  }, [shouldLoadVideo, videoUrl]);
 
   if (!videoUrl) {
     return null;
   }
 
   return (
-    <section className="group relative mt-4 sm:mt-8 w-full overflow-hidden">
+    <section ref={sectionRef} className="group relative mt-4 sm:mt-8 w-full overflow-hidden">
       {/* Mobile-first height */}
       <div className="relative h-[45vh] min-h-[300px] w-full overflow-hidden bg-[#1D1C1A] md:h-[30vh] md:min-h-[225px]">
         <video
           ref={videoRef}
-          src={videoUrl}
+          src={shouldLoadVideo ? videoUrl : undefined}
           autoPlay
           muted
           loop
           playsInline
-          preload="metadata"
+          preload={shouldLoadVideo ? "metadata" : "none"}
           className="absolute inset-0 h-full w-full object-cover transition-all duration-700 grayscale group-hover:grayscale-0"
         />
 
@@ -422,20 +439,16 @@ function FilmCard({
   const articleRef = useRef<HTMLElement | null>(null);
   const videoRef =
     useRef<HTMLVideoElement | null>(null);
-  const [shouldLoadVideo, setShouldLoadVideo] = useState(index < 2);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
 
   // isActivated = user has clicked at least once (controls become visible, unmuted)
   // isPlaying = actual video play state, synced via native events
   const [isActivated, setIsActivated] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isLoading, setIsLoading] = useState(Boolean(film.videoUrl) && index < 2);
+  const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    if (index < 2) {
-      setShouldLoadVideo(true);
-      return;
-    }
     if (shouldLoadVideo) return;
 
     const article = articleRef.current;
@@ -453,11 +466,11 @@ function FilmCard({
           observer.disconnect();
         }
       },
-      { rootMargin: "0px" }
+      { rootMargin: "200px 0px" }
     );
     observer.observe(article);
     return () => observer.disconnect();
-  }, [film.videoUrl, index, shouldLoadVideo]);
+  }, [film.videoUrl, shouldLoadVideo]);
 
   useEffect(() => {
     const video =
@@ -635,7 +648,7 @@ function FilmCard({
             playsInline
             controlsList={vertical ? "nofullscreen nodownload noremoteplayback" : "nodownload noremoteplayback"}
             disablePictureInPicture
-            poster={film.thumbnailUrl || undefined}
+            poster={shouldLoadVideo ? film.thumbnailUrl || undefined : undefined}
             preload={shouldLoadVideo ? "metadata" : "none"}
             onLoadedData={() => setIsLoading(false)}
             onCanPlay={() => setIsLoading(false)}
@@ -731,6 +744,7 @@ function Films() {
     content,
     setContent,
   ] = useState<FilmsContent>(DEFAULT_FILMS);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [
     activeFilter,
@@ -747,27 +761,12 @@ function Films() {
   ======================================================= */
 
   useEffect(() => {
-    const controller =
-      new AbortController();
+    let isMounted = true;
 
     async function fetchContent() {
       try {
-        const response =
-          await fetch(
-            `${API_BASE_URL}/api/content.php`,
-            {
-              signal:
-                controller.signal,
-              cache: 'no-store',
-            }
-          );
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data =
-          await readApiJson(response, 'Films');
+        const data = await fetchApiJson(`${API_BASE_URL}/api/content.php`, 'Films');
+        if (!isMounted) return;
 
         const savedFilms =
           data?.content?.films;
@@ -777,6 +776,7 @@ function Films() {
           typeof savedFilms ===
           "object"
         ) {
+          setIsLoading(false);
           setContent({
             ...DEFAULT_FILMS,
             ...savedFilms,
@@ -792,10 +792,7 @@ function Films() {
           });
         }
       } catch (error) {
-        if (
-          error instanceof Error && error.name !==
-          "AbortError"
-        ) {
+        if (isMounted) {
           console.error(
             "Failed to load films content:",
             error
@@ -807,7 +804,7 @@ function Films() {
     fetchContent();
 
     return () => {
-      controller.abort();
+      isMounted = false;
     };
   }, []);
 
@@ -855,6 +852,33 @@ function Films() {
       content.items,
       activeFilter,
     ]);
+
+  if (isLoading) {
+    return (
+      <main
+        aria-busy="true"
+        aria-label="Loading films"
+        className="min-h-screen bg-white px-4 pt-28 sm:px-6 lg:px-12"
+      >
+        <div className="mx-auto max-w-6xl animate-pulse">
+          <div className="mb-8 flex justify-center gap-6 border-b border-black/10 pb-6">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="h-3 w-16 bg-black/10" />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index}>
+                <div className="aspect-video bg-black/[0.06]" />
+                <div className="mt-3 h-3 w-20 bg-black/10" />
+                <div className="mt-2 h-5 max-w-40 bg-black/[0.06]" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   /* =======================================================
      HERO VIDEO
