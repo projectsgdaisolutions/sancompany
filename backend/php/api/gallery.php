@@ -31,7 +31,7 @@ ob_start();
  * =========================================================
  *
  * Maximum total cards:
- *   wedding <= 12, engagement <= 8, preWedding <= 8
+ *   wedding <= 30, engagement <= 20, preWedding <= 20
  *
  * Maximum photos per individual card:
  *   50
@@ -61,10 +61,10 @@ header('Expires: 0');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-const MAX_GALLERY_CARDS = 28;
-const MAX_WEDDING_ALBUMS = 12;
-const MAX_ENGAGEMENT_ALBUMS = 8;
-const MAX_PRE_WEDDING_ALBUMS = 8;
+const MAX_GALLERY_CARDS = 70;
+const MAX_WEDDING_ALBUMS = 30;
+const MAX_ENGAGEMENT_ALBUMS = 20;
+const MAX_PRE_WEDDING_ALBUMS = 20;
 const MAX_PHOTOS_PER_CARD = 50;
 const MAX_HOME_COUPLE_PHOTOS = 40;
 

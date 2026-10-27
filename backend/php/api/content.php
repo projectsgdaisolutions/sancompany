@@ -51,7 +51,7 @@ ob_start();
  * IMPORTANT:
  *   "preWedding": [ ... ]
  *
- *   Maximum TOTAL gallery albums = 28
+ *   Maximum TOTAL gallery albums = 70
  *
  * PHOTO LIMIT:
  *   Maximum 50 photos per individual album/card.
@@ -71,11 +71,11 @@ header('Expires: 0');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-const MAX_GALLERY_CARDS = 28;
-const MAX_WEDDING_ALBUMS = 12;
-const MAX_ENGAGEMENT_ALBUMS = 8;
-const MAX_PRE_WEDDING_ALBUMS = 8;
-const MAX_FILMS = 32;
+const MAX_GALLERY_CARDS = 70;
+const MAX_WEDDING_ALBUMS = 30;
+const MAX_ENGAGEMENT_ALBUMS = 20;
+const MAX_PRE_WEDDING_ALBUMS = 20;
+const MAX_FILMS = 92;
 
 const ALLOWED_FILM_CATEGORIES = [
     "Wedding Film",
@@ -85,10 +85,10 @@ const ALLOWED_FILM_CATEGORIES = [
 ];
 
 const FILM_CATEGORY_LIMITS = [
-    'Wedding Film' => 8,
-    'Engagement' => 8,
-    'Prewedding' => 8,
-    'Reels' => 8,
+    'Wedding Film' => 32,
+    'Engagement' => 20,
+    'Prewedding' => 20,
+    'Reels' => 20,
 ];
 
 
@@ -266,7 +266,7 @@ function normalizeGalleryCard(
  * Validate gallery cards.
  *
  * TOTAL:
- *   wedding <= 12, engagement <= 8, preWedding <= 8
+ *   wedding <= 30, engagement <= 20, preWedding <= 20
  *
  * Slugs must be unique across both sections.
  */
@@ -701,7 +701,7 @@ function validateFilmCategoryLimits(array $items): void
 /**
  * Normalize and validate the Films section.
  *
- * Total maximum = 32, distributed across the four film categories.
+ * Total maximum = 92, distributed across the four film categories.
  */
 function normalizeAndValidateFilms(array $films, bool $rejectInvalidCategories = true): array
 {
@@ -1132,7 +1132,7 @@ try {
 
            Films are stored inside website_content.gallery.films.
            Hero Video is independent. Only films.items count
-           toward MAX_FILMS = 32. Category distribution is validated below.
+           toward MAX_FILMS = 92. Category distribution is validated below.
         ------------------------------------------------- */
 
         $filmsData =
@@ -1380,7 +1380,7 @@ try {
 
 
             /* ---------------------------------------------
-               Validate category limits and 28-album total
+               Validate category limits and 70-album total
             --------------------------------------------- */
 
             $mergedGallery = normalizeGallery($mergedGallery);

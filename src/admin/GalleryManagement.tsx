@@ -103,12 +103,12 @@ interface GalleryApiResponse {
 
 const API_BASE_URL = API_URL;
 
-const MAX_CARDS = 28;
+const MAX_CARDS = 70;
 const MAX_PHOTOS = 50;
 const MAX_ALBUMS_BY_SECTION: Record<GallerySection, number> = {
-  wedding: 12,
-  engagement: 8,
-  preWedding: 8,
+  wedding: 30,
+  engagement: 20,
+  preWedding: 20,
 };
 const MAX_IMAGE_SIZE = 25 * 1024 * 1024;
 const MAX_CONCURRENT_PHOTO_UPLOADS = 3;

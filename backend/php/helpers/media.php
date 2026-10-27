@@ -47,6 +47,52 @@ function mediaStorageRoot(): string {
     return rtrim($root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads';
 }
 
+function packagePdfPublicUrl(string $filename): string {
+    $scriptPath = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $scriptDirectory = trim(dirname($scriptPath), '/.');
+    $endpointPath = ($scriptDirectory !== '' ? '/' . $scriptDirectory : '') . '/package-pdf.php';
+
+    $configuredBaseUrl = trim((string) (getenv('APP_BASE_URL') ?: ''));
+    $configuredOrigin = $configuredBaseUrl !== ''
+        ? (parse_url($configuredBaseUrl, PHP_URL_SCHEME) . '://' . parse_url($configuredBaseUrl, PHP_URL_HOST) .
+            (parse_url($configuredBaseUrl, PHP_URL_PORT) ? ':' . parse_url($configuredBaseUrl, PHP_URL_PORT) : ''))
+        : '';
+    if ($configuredOrigin === '://') {
+        $configuredOrigin = '';
+    }
+
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+        (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443);
+    $origin = $configuredOrigin !== ''
+        ? rtrim($configuredOrigin, '/')
+        : (($isHttps ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost:8000'));
+
+    return $origin . $endpointPath . '?file=' . rawurlencode($filename);
+}
+
+function packagePdfStoragePath(string $filename): ?string {
+    if (
+        basename($filename) !== $filename ||
+        !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*\\.pdf$/i', $filename)
+    ) {
+        return null;
+    }
+
+    $storageDirectory = mediaStorageRoot() . DIRECTORY_SEPARATOR . 'packages';
+    $directory = realpath($storageDirectory);
+    $filePath = realpath($storageDirectory . DIRECTORY_SEPARATOR . $filename);
+    if ($directory === false || $filePath === false || !is_file($filePath)) {
+        return null;
+    }
+
+    $directoryPrefix = rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if (strncasecmp($filePath, $directoryPrefix, strlen($directoryPrefix)) !== 0) {
+        return null;
+    }
+
+    return $filePath;
+}
+
 function mediaPublicBaseUrl(): string {
     return rtrim((string) getenv('APP_BASE_URL') ?: '', '/');
 }

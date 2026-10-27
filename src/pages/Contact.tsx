@@ -117,6 +117,35 @@ const DEFAULT_CONTACT = {
   introWhatsAppLabel: 'WhatsApp',
 }
 
+type PackageId = 'wedding' | 'pre-wedding' | 'engagement' | 'other'
+
+type ContactPackage = {
+  id: PackageId
+  title: string
+  imageUrl: string
+  pdfUrl: string
+}
+
+const DEFAULT_PACKAGES: ContactPackage[] = [
+  { id: 'wedding', title: 'Wedding Package', imageUrl: '', pdfUrl: '' },
+  { id: 'pre-wedding', title: 'Pre Wedding Package', imageUrl: '', pdfUrl: '' },
+  { id: 'engagement', title: 'Engagement Package', imageUrl: '', pdfUrl: '' },
+  { id: 'other', title: 'Other Package', imageUrl: '', pdfUrl: '' },
+]
+
+function normalizePackages(value: unknown): ContactPackage[] {
+  const packages = Array.isArray(value) ? value : []
+  return DEFAULT_PACKAGES.map((defaultPackage, index) => {
+    const saved = packages.find((item) => item?.id === defaultPackage.id) ?? packages[index]
+    return {
+      ...defaultPackage,
+      title: typeof saved?.title === 'string' ? saved.title : defaultPackage.title,
+      imageUrl: typeof saved?.imageUrl === 'string' ? saved.imageUrl : defaultPackage.imageUrl,
+      pdfUrl: typeof saved?.pdfUrl === 'string' ? saved.pdfUrl : defaultPackage.pdfUrl,
+    }
+  })
+}
+
 /* =========================================================
    CONTACT PAGE
 ========================================================= */
@@ -124,7 +153,10 @@ const DEFAULT_CONTACT = {
 function Contact() {
   useGoogleFonts()
 
-  const [contactData, setContactData] = useState(DEFAULT_CONTACT)
+  const [contactData, setContactData] = useState({
+    ...DEFAULT_CONTACT,
+    packages: DEFAULT_PACKAGES,
+  })
 
   /* =======================================================
      FETCH DYNAMIC CONTACT CONTENT FROM API
@@ -140,6 +172,7 @@ function Contact() {
         const remote = data.contact || data.data || data.content?.contact
         if (isMounted && data.success && remote) {
           setContactData({
+            packages: normalizePackages(remote.packages),
             formEyebrow: remote.formEyebrow ?? DEFAULT_CONTACT.formEyebrow,
             formHeadingNormal: remote.formHeadingNormal ?? DEFAULT_CONTACT.formHeadingNormal,
             formHeadingItalic: remote.formHeadingItalic ?? DEFAULT_CONTACT.formHeadingItalic,
@@ -372,7 +405,63 @@ function Contact() {
       <section id="contact-form" className="border-t border-black/10">
         {/* Increased pt slightly to push 1 tab down from navbar */}
         <div className="mx-auto max-w-6xl px-4 pt-28 pb-8 sm:px-6 sm:pt-32 sm:pb-10 lg:px-8 lg:pt-36 lg:pb-12">
-          <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
+          <section
+            aria-labelledby="packages-heading"
+            className="relative mb-16 pt-2"
+          >
+            <div className="mb-5 lg:absolute lg:left-0 lg:top-2 lg:mb-0">
+              <p id="packages-heading" className="text-[9px] uppercase tracking-[0.4em] text-[#171717]">
+                Our Packages
+              </p>
+            </div>
+
+     <div className="mx-auto mt-4 grid w-full max-w-[600px] grid-cols-2 gap-x-2 gap-y-6 sm:grid-cols-4 sm:gap-x-3">
+  {normalizePackages(contactData.packages).map(({ id, title, imageUrl, pdfUrl }) => (
+    <div key={id} className="flex min-w-0 flex-col items-center text-center">
+                  {pdfUrl ? (
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" aria-label={`View ${title} PDF`}>
+                      <img
+                        src={imageUrl}
+                        alt={title}
+                        className="aspect-[3/4] w-full max-w-[112px] object-cover"
+                        loading="lazy"
+                      />
+                    </a>
+                  ) : (
+                    <img
+                      src={imageUrl}
+                      alt={title}
+                      className="aspect-[3/4] w-full max-w-[112px] object-cover"
+                      loading="lazy"
+                    />
+                  )}
+                  <h3 className="mt-3 text-xs font-normal text-[#171717] sm:text-sm">
+                    {title}
+                  </h3>
+                  {pdfUrl ? (
+                    <a
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 appearance-none bg-transparent p-0 text-[9px] tracking-[0.22em] text-[#171717]/70"
+                    >
+                      Click to view
+                    </a>
+                  ) : (
+                    <span
+                      aria-disabled="true"
+                      title="Package PDF is not available"
+                      className="mt-2 appearance-none bg-transparent p-0 text-[9px] tracking-[0.22em] text-[#171717]/70"
+                    >
+                      Click to view
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+       <div className="grid grid-cols-4 gap-2 sm:gap-3 lg:gap-6">
 
             {/* FORM */}
             <motion.div

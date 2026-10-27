@@ -8,7 +8,8 @@
  * and returns a publicly accessible URL so it can be shared via
  * WhatsApp as a real downloadable link.
  *
- * No authentication required (public career application endpoint).
+ * Career uploads remain public. Contact package uploads use purpose=package
+ * and require an authenticated admin session.
  * File-type and content validation is enforced server-side.
  */
 
@@ -16,6 +17,7 @@ ob_start();
 
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../helpers/response.php';
+require_once __DIR__ . '/../helpers/media.php';
 
 handleCors();
 
@@ -24,30 +26,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+$isPackageUpload = (string) ($_POST['purpose'] ?? '') === 'package';
+$fileLabel = $isPackageUpload ? 'Package PDF' : 'Resume';
+if ($isPackageUpload) {
+    require_once __DIR__ . '/../helpers/auth.php';
+    requireAdminAuth();
+}
+
 /* =========================================================
    HELPERS — inline, no shared media.php dependency to avoid
    video/image-only type restrictions
 ========================================================= */
-
-function resumeStorageRoot(): string
-{
-    $configuredRoot = getenv('MEDIA_STORAGE_ROOT');
-    if (is_string($configuredRoot) && trim($configuredRoot) !== '') {
-        return rtrim(trim($configuredRoot), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'uploads';
-    }
-
-    $documentRoot = $_SERVER['DOCUMENT_ROOT'] ?? '';
-    if (
-        is_string($documentRoot) &&
-        trim($documentRoot) !== '' &&
-        !str_ends_with(str_replace('\\', '/', rtrim(trim($documentRoot), '/')), '/backend/php')
-    ) {
-        return rtrim(trim($documentRoot), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'uploads';
-    }
-
-    $root = dirname(__DIR__, 3);
-    return rtrim($root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads';
-}
 
 function resumePublicBaseUrl(): string
 {
@@ -77,7 +66,7 @@ function resumeEnsureDirectory(string $dir): void
 ========================================================= */
 
 if (!isset($_FILES['file']) || !is_array($_FILES['file'])) {
-    errorResponse('No file was uploaded.', 400);
+    errorResponse('No ' . strtolower($fileLabel) . ' file was uploaded.', 400);
     exit;
 }
 
@@ -94,7 +83,7 @@ if ((int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         UPLOAD_ERR_CANT_WRITE => 'Unable to write uploaded file.',
         UPLOAD_ERR_EXTENSION  => 'Upload was blocked by PHP extension.',
     ];
-    $msg = $uploadErrors[(int) $file['error']] ?? 'Resume upload failed.';
+    $msg = $uploadErrors[(int) $file['error']] ?? $fileLabel . ' upload failed.';
     errorResponse($msg, 400);
     exit;
 }
@@ -105,21 +94,21 @@ if (!is_uploaded_file($file['tmp_name'] ?? '')) {
 }
 
 $size = (int) ($file['size'] ?? 0);
-$maxSize = 10 * 1024 * 1024; // 10 MB limit for resumes
+$maxSize = 10 * 1024 * 1024; // 10 MB limit for PDF uploads
 
 if ($size <= 0) {
     errorResponse('Uploaded file is empty.', 400);
     exit;
 }
 if ($size > $maxSize) {
-    errorResponse('Resume file must be under 10 MB.', 400);
+    errorResponse($fileLabel . ' must be under 10 MB.', 400);
     exit;
 }
 
 /* Verify MIME type is PDF */
 $detectedMime = strtolower((string) (mime_content_type($file['tmp_name']) ?: ''));
 if ($detectedMime !== 'application/pdf') {
-    errorResponse('Only PDF files are allowed for resume upload.', 400);
+    errorResponse('Only PDF files are allowed for ' . strtolower($fileLabel) . ' upload.', 400);
     exit;
 }
 
@@ -127,7 +116,7 @@ if ($detectedMime !== 'application/pdf') {
 $originalName = basename((string) ($file['name'] ?? 'resume.pdf'));
 $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
 if ($ext !== 'pdf') {
-    errorResponse('Only .pdf files are accepted.', 400);
+    errorResponse('Only .pdf files are accepted for ' . strtolower($fileLabel) . ' upload.', 400);
     exit;
 }
 
@@ -152,8 +141,9 @@ if ($safeName === '') {
 $filename = bin2hex(random_bytes(10)) . '-' . $safeName . '.pdf';
 
 /* Target directory: uploads/resumes/ */
-$storageRoot = resumeStorageRoot();
-$targetDir   = $storageRoot . DIRECTORY_SEPARATOR . 'resumes';
+$storageRoot = mediaStorageRoot();
+$uploadDirectory = $isPackageUpload ? 'packages' : 'resumes';
+$targetDir   = $storageRoot . DIRECTORY_SEPARATOR . $uploadDirectory;
 
 try {
     resumeEnsureDirectory($targetDir);
@@ -172,8 +162,10 @@ if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
 }
 
 /* Build public URL */
-$relativePath = '/uploads/resumes/' . $filename;
-$publicUrl    = resumePublicBaseUrl() . $relativePath;
+$relativePath = '/uploads/' . $uploadDirectory . '/' . $filename;
+$publicUrl = $isPackageUpload
+    ? packagePdfPublicUrl($filename)
+    : resumePublicBaseUrl() . $relativePath;
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');

@@ -1,7 +1,36 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { API_URL, readApiJson } from '../services/api';
+import { uploadToCloudinary } from '../services/cloudinary';
 
 const API_BASE_URL = API_URL;
+
+type PackageId = 'wedding' | 'pre-wedding' | 'engagement' | 'other';
+type ContactPackage = {
+  id: PackageId;
+  title: string;
+  imageUrl: string;
+  pdfUrl: string;
+};
+
+const DEFAULT_PACKAGES: ContactPackage[] = [
+  { id: 'wedding', title: 'Wedding Package', imageUrl: '', pdfUrl: '' },
+  { id: 'pre-wedding', title: 'Pre Wedding Package', imageUrl: '', pdfUrl: '' },
+  { id: 'engagement', title: 'Engagement Package', imageUrl: '', pdfUrl: '' },
+  { id: 'other', title: 'Other Package', imageUrl: '', pdfUrl: '' },
+];
+
+function normalizePackages(value?: ContactPackage[]): ContactPackage[] {
+  const packages = Array.isArray(value) ? value : [];
+  return DEFAULT_PACKAGES.map((defaultPackage, index) => {
+    const saved = packages.find((item) => item?.id === defaultPackage.id) ?? packages[index];
+    return {
+      ...defaultPackage,
+      title: typeof saved?.title === 'string' ? saved.title : defaultPackage.title,
+      imageUrl: typeof saved?.imageUrl === 'string' ? saved.imageUrl : defaultPackage.imageUrl,
+      pdfUrl: typeof saved?.pdfUrl === 'string' ? saved.pdfUrl : defaultPackage.pdfUrl,
+    };
+  });
+}
 
 // DEFAULT CONTACT DATA — exact values from Contact.jsx (Source of Truth)
 const DEFAULT_CONTACT = {
@@ -78,6 +107,7 @@ const DEFAULT_CONTACT = {
   ctaHeadingItalic: 'starts here.',
   ctaButtonText: 'Begin Your Enquiry',
   ctaButtonHref: '#contact-form',
+  packages: DEFAULT_PACKAGES,
 };
 
 type ContactContent = typeof DEFAULT_CONTACT;
@@ -152,6 +182,7 @@ function mergeContact(saved: Partial<ContactContent> = {}): ContactContent {
     ctaHeadingItalic: saved.ctaHeadingItalic ?? base.ctaHeadingItalic,
     ctaButtonText: saved.ctaButtonText ?? base.ctaButtonText,
     ctaButtonHref: saved.ctaButtonHref ?? base.ctaButtonHref,
+    packages: normalizePackages(saved.packages),
   };
 }
 
@@ -219,6 +250,7 @@ const ContactManagement = () => {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [errMsg, setErrMsg] = useState('');
+  const [uploadingPackageFiles, setUploadingPackageFiles] = useState<Record<string, boolean>>({});
 
   // Drag & drop state for formServiceOptions
   const [draggedOptionIndex, setDraggedOptionIndex] = useState<number | null>(null);
@@ -256,6 +288,66 @@ const ContactManagement = () => {
   const set = (field: keyof ContactContent, value: string | string[]) => {
     setContact((prev) => ({ ...prev, [field]: value }));
     setSaveMsg('');
+  };
+
+  const setPackage = (id: PackageId, field: 'title' | 'imageUrl' | 'pdfUrl', value: string) => {
+    setContact((prev) => ({
+      ...prev,
+      packages: prev.packages.map((item) => item.id === id ? { ...item, [field]: value } : item),
+    }));
+    setSaveMsg('');
+  };
+
+  const uploadPackageImage = async (id: PackageId, file?: File) => {
+    if (!file) return;
+    const uploadKey = `${id}-image`;
+    try {
+      setUploadingPackageFiles((previous) => ({ ...previous, [uploadKey]: true }));
+      setErrMsg('');
+      const result = await uploadToCloudinary(file, 'contact/packages');
+      setPackage(id, 'imageUrl', result.url);
+      setSaveMsg('Package image uploaded. Save Contact changes to publish it.');
+    } catch (error) {
+      console.error(error);
+      setErrMsg(error instanceof Error ? error.message : 'Package image upload failed.');
+    } finally {
+      setUploadingPackageFiles((previous) => ({ ...previous, [uploadKey]: false }));
+    }
+  };
+
+  const uploadPackagePdf = async (id: PackageId, file?: File) => {
+    if (!file) return;
+    const uploadKey = `${id}-pdf`;
+    try {
+      setUploadingPackageFiles((previous) => ({ ...previous, [uploadKey]: true }));
+      setErrMsg('');
+      const token = localStorage.getItem('adminToken');
+      if (!token) throw new Error('Admin session not found. Please login again.');
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('purpose', 'package');
+      const response = await fetch(`${API_BASE_URL}/api/resume-upload.php`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await readApiJson<{ success: boolean; url?: string; message?: string }>(
+        response,
+        'Package PDF Upload'
+      );
+      if (!response.ok || !data.success || !data.url) {
+        throw new Error(data.message || 'Package PDF upload failed.');
+      }
+
+      setPackage(id, 'pdfUrl', data.url);
+      setSaveMsg('Package PDF uploaded. Save Contact changes to publish it.');
+    } catch (error) {
+      console.error(error);
+      setErrMsg(error instanceof Error ? error.message : 'Package PDF upload failed.');
+    } finally {
+      setUploadingPackageFiles((previous) => ({ ...previous, [uploadKey]: false }));
+    }
   };
 
   // Service Option array helpers
@@ -997,6 +1089,92 @@ const ContactManagement = () => {
               </div>
             </div>
           </div>
+        </SectionCard>
+
+        <SectionCard
+          number={6}
+          title="Packages"
+          description="Manage the four Contact page package cards, including their titles, images, and individual PDF documents."
+        >
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {contact.packages.map((item) => (
+              <div key={item.id} className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
+                <Field
+                  label="Package Title"
+                  value={item.title}
+                  onChange={(value) => setPackage(item.id, 'title', value)}
+                  placeholder="Package title"
+                />
+
+                <div>
+                  <p className="mb-2 block text-[9px] font-semibold uppercase tracking-[0.3em] text-[#927344]">
+                    Package Image
+                  </p>
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={`${item.title} preview`}
+                      className="mb-3 aspect-[3/4] w-full max-w-[112px] object-cover"
+                    />
+                  ) : (
+                    <div className="mb-3 flex aspect-[3/4] w-full max-w-[112px] items-center justify-center bg-neutral-100 text-[9px] text-neutral-500">
+                      No image uploaded
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={uploadingPackageFiles[`${item.id}-image`]}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.currentTarget.value = '';
+                      void uploadPackageImage(item.id, file);
+                    }}
+                    className="block w-full text-[11px] text-neutral-600 file:mr-3 file:rounded-lg file:border-0 file:bg-neutral-100 file:px-3 file:py-2 file:text-[9px] file:font-semibold file:uppercase file:tracking-[0.12em] hover:file:bg-neutral-200 disabled:opacity-50"
+                  />
+                  {uploadingPackageFiles[`${item.id}-image`] && (
+                    <p className="mt-2 text-[10px] text-neutral-500">Uploading image...</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="mb-2 block text-[9px] font-semibold uppercase tracking-[0.3em] text-[#927344]">
+                    Package PDF
+                  </p>
+                  {item.pdfUrl && (
+                    <a
+                      href={item.pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mb-3 block truncate text-[11px] text-neutral-600 underline"
+                    >
+                      Current PDF
+                    </a>
+                  )}
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    disabled={uploadingPackageFiles[`${item.id}-pdf`]}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.currentTarget.value = '';
+                      void uploadPackagePdf(item.id, file);
+                    }}
+                    className="block w-full text-[11px] text-neutral-600 file:mr-3 file:rounded-lg file:border-0 file:bg-neutral-100 file:px-3 file:py-2 file:text-[9px] file:font-semibold file:uppercase file:tracking-[0.12em] hover:file:bg-neutral-200 disabled:opacity-50"
+                  />
+                  {uploadingPackageFiles[`${item.id}-pdf`] && (
+                    <p className="mt-2 text-[10px] text-neutral-500">Uploading PDF...</p>
+                  )}
+                  {!item.pdfUrl && (
+                    <p className="mt-2 text-[10px] text-neutral-500">No PDF uploaded yet.</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-5 text-[10px] leading-5 text-neutral-500">
+            Uploaded media is not public on the Contact page until you save the Contact changes.
+          </p>
         </SectionCard>
 
         {/* STICKY SAVE BUTTON */}

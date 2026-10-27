@@ -39,12 +39,12 @@ const FILM_CATEGORIES: FilmCategory[] = [
 ];
 const FILM_CATEGORY_SET = new Set<string>(FILM_CATEGORIES);
 
-const MAX_FILMS = 32;
+const MAX_FILMS = 92;
 const FILM_CATEGORY_LIMITS: Record<FilmCategory, number> = {
-    "Wedding Film": 8,
-    "Engagement": 8,
-    "Prewedding": 8,
-    "Reels": 8,
+    "Wedding Film": 32,
+    "Engagement": 20,
+    "Prewedding": 20,
+    "Reels": 20,
 };
 
 const isPopulatedFilm = (film: FilmItem) =>
@@ -66,7 +66,7 @@ const canonicalFilmCategory = (value: unknown): FilmCategory | null => {
 
    Films are managed by PHP/MySQL.
    No local/demo films are seeded here.
-    Hero Video is separate from the 32-film limit.
+    Hero Video is separate from the 92-film limit.
 ========================================================= */
 
 const DEFAULT_FILMS: FilmsContent = {

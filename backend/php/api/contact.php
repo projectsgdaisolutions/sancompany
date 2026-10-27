@@ -16,6 +16,7 @@ require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../helpers/response.php';
 require_once __DIR__ . '/../helpers/auth.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../helpers/media.php';
 
 handleCors();
 
@@ -93,6 +94,32 @@ function getDefaultContact(): array
         'ctaHeadingItalic' => 'starts here.',
         'ctaButtonText' => 'Begin Your Enquiry',
         'ctaButtonHref' => '#contact-form',
+        'packages' => [
+            [
+                'id' => 'wedding',
+                'title' => 'Wedding Package',
+                'imageUrl' => '/uploads/images/gallery/covers/f1bb2b8f73f4ba9470cba059-035A2709.jpg',
+                'pdfUrl' => '',
+            ],
+            [
+                'id' => 'pre-wedding',
+                'title' => 'Pre Wedding Package',
+                'imageUrl' => '/uploads/images/gallery/pre-wedding/3645ef81e32079ccc08dbd6a-035A9544.jpg',
+                'pdfUrl' => '',
+            ],
+            [
+                'id' => 'engagement',
+                'title' => 'Engagement Package',
+                'imageUrl' => '/uploads/images/gallery/covers/6d050dd3f6e8ef9316f12e1e-035A4610.jpg',
+                'pdfUrl' => '',
+            ],
+            [
+                'id' => 'other',
+                'title' => 'Other Package',
+                'imageUrl' => '/uploads/images/gallery/covers/5a50aba03084732963bc66a8-035A9043.jpg',
+                'pdfUrl' => '',
+            ],
+        ],
     ];
 }
 
@@ -109,6 +136,53 @@ function decodeContactJson(?string $json): array
     $decoded = json_decode($json, true);
 
     return is_array($decoded) ? $decoded : [];
+}
+
+function normalizeContactPackages($packages): array
+{
+    $defaults = getDefaultContact()['packages'];
+    $savedPackages = is_array($packages) ? $packages : [];
+    $normalized = [];
+
+    foreach ($defaults as $index => $default) {
+        $saved = null;
+        foreach ($savedPackages as $candidate) {
+            if (is_array($candidate) && ($candidate['id'] ?? null) === $default['id']) {
+                $saved = $candidate;
+                break;
+            }
+        }
+        if ($saved === null && isset($savedPackages[$index]) && is_array($savedPackages[$index])) {
+            $saved = $savedPackages[$index];
+        }
+
+        $title = $saved['title'] ?? null;
+        $normalized[] = [
+            'id' => $default['id'],
+            'title' => is_string($title) && trim($title) !== '' ? trim($title) : $default['title'],
+            'imageUrl' => is_string($saved['imageUrl'] ?? null) && trim($saved['imageUrl']) !== ''
+                ? trim($saved['imageUrl'])
+                : $default['imageUrl'],
+            'pdfUrl' => normalizePackagePdfUrl($saved['pdfUrl'] ?? ''),
+        ];
+    }
+
+    return $normalized;
+}
+
+function normalizePackagePdfUrl($value): string
+{
+    if (!is_string($value) || trim($value) === '') {
+        return '';
+    }
+
+    $pdfUrl = trim($value);
+    $path = (string) (parse_url($pdfUrl, PHP_URL_PATH) ?? '');
+    if (preg_match('#(?:^|/)uploads/packages/([^/]+\\.pdf)$#i', $path, $matches)) {
+        return packagePdfPublicUrl(rawurldecode($matches[1]));
+    }
+
+    return $pdfUrl;
 }
 
 function getContactContent(PDO $pdo): array
@@ -243,6 +317,7 @@ function handleGet(PDO $pdo): void
         // Initial fallback to standard defaults if empty in database
         $contact = getDefaultContact();
     }
+    $contact['packages'] = normalizeContactPackages($contact['packages'] ?? null);
 
     jsonResponse([
         'success' => true,
@@ -321,6 +396,8 @@ function handlePut(PDO $pdo): void
             400
         );
     }
+
+    $contact['packages'] = normalizeContactPackages($contact['packages'] ?? null);
 
     try {
         $pdo->beginTransaction();
