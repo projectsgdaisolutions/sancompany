@@ -407,9 +407,9 @@ function Contact() {
         <div className="mx-auto max-w-6xl px-4 pt-28 pb-8 sm:px-6 sm:pt-32 sm:pb-10 lg:px-8 lg:pt-36 lg:pb-12">
           <section
             aria-labelledby="packages-heading"
-            className="relative mb-16 pt-2"
+            className="relative mb-16 pt-8"
           >
-            <div className="mb-5 lg:absolute lg:left-0 lg:top-2 lg:mb-0">
+            <div className="mb-5 text-center">
               <p id="packages-heading" className="text-[9px] uppercase tracking-[0.4em] text-[#171717]">
                 Our Packages
               </p>
@@ -461,7 +461,7 @@ function Contact() {
             </div>
           </section>
 
-       <div className="grid grid-cols-4 gap-2 sm:gap-3 lg:gap-6">
+       <div className="mx-auto grid w-full max-w-5xl grid-cols-4 gap-2 sm:gap-3 lg:grid-cols-2 lg:gap-12">
 
             {/* FORM */}
             <motion.div
