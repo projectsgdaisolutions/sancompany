@@ -232,11 +232,13 @@ function HeroVideo({
 interface VideoModalProps {
   film: FilmItem | null;
   onClose: () => void;
+  onVideoPlay: (video: HTMLVideoElement) => void;
 }
 
 function VideoModal({
   film,
   onClose,
+  onVideoPlay,
 }: VideoModalProps) {
   const reelPlayerRef = useRef<HTMLDivElement | null>(null);
   const [isReelFullscreen, setIsReelFullscreen] = useState(false);
@@ -387,6 +389,7 @@ function VideoModal({
       autoPlay
       preload="metadata"
       playsInline
+      onPlay={(event) => onVideoPlay(event.currentTarget)}
      className={
   isReel
     ? isReelFullscreen
@@ -427,6 +430,7 @@ interface FilmCardProps {
   film: FilmItem;
   index: number;
   onExpand: (film: FilmItem) => void;
+  onVideoPlay: (video: HTMLVideoElement) => void;
   vertical?: boolean;
 }
 
@@ -434,6 +438,7 @@ function FilmCard({
   film,
   index,
   onExpand,
+  onVideoPlay,
   vertical = false,
 }: FilmCardProps) {
   const articleRef = useRef<HTMLElement | null>(null);
@@ -655,6 +660,7 @@ function FilmCard({
             onWaiting={() => setIsLoading(true)}
             onStalled={() => setIsLoading(true)}
             onPlaying={() => setIsLoading(false)}
+            onPlay={(event) => onVideoPlay(event.currentTarget)}
             onError={() => {
               setIsLoading(false);
               setHasError(true);
@@ -739,6 +745,14 @@ function FilmCard({
 
 function Films() {
   useGoogleFonts();
+
+  const activeVideoRef = useRef<HTMLVideoElement | null>(null);
+  const handleVideoPlay = (video: HTMLVideoElement) => {
+    if (activeVideoRef.current !== video) {
+      activeVideoRef.current?.pause();
+      activeVideoRef.current = video;
+    }
+  };
 
   const [
     content,
@@ -894,6 +908,7 @@ function Films() {
         {selectedFilm && (
           <VideoModal
             film={selectedFilm}
+            onVideoPlay={handleVideoPlay}
             onClose={() =>
               setSelectedFilm(null)
             }
@@ -991,6 +1006,7 @@ function Films() {
                       onExpand={
                         setSelectedFilm
                       }
+                      onVideoPlay={handleVideoPlay}
                       vertical={activeFilter === "Reels"}
                     />
                   )
